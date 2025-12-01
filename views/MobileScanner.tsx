@@ -223,8 +223,8 @@ const MobileScanner: React.FC = () => {
            </div>
            
            <div className="text-center space-y-2">
-              <h1 className="text-2xl font-black text-red-500 tracking-[0.2em] uppercase">System Locked</h1>
-              <p className="text-xs text-red-400 font-mono">TOUCH TERMINAL TO INITIALIZE UPLINK</p>
+              <h1 className="text-2xl font-black text-red-500 tracking-[0.2em] uppercase">SISTEMA BLOQUEADO</h1>
+              <p className="text-xs text-red-400 font-mono">TOQUE NA TELA PARA INICIAR CONEXÃO</p>
            </div>
         </div>
         
