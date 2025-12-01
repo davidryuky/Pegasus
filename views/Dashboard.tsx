@@ -6,7 +6,7 @@ import QRCodeDisplay from '../components/QRCodeDisplay';
 import HackerMap from '../components/HackerMap';
 import { mqttService } from '../services/mqttService';
 import { TerminalLog, DeviceInfo, StreamMessage } from '../types';
-import { Camera, X, Disc, Video } from 'lucide-react';
+import { Camera, X, Disc, Video, Aperture } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const [sessionId] = useState(uuidv4());
@@ -105,6 +105,18 @@ const Dashboard: React.FC = () => {
       setIsCameraActive(false);
       setCameraStream(null);
     }
+  };
+
+  const takeSnapshot = () => {
+     if (!cameraStream) return;
+     const link = document.createElement('a');
+     link.href = cameraStream;
+     link.download = `pegasus_capture_${sessionId.substring(0,8)}_${Date.now()}.jpg`;
+     document.body.appendChild(link);
+     link.click();
+     document.body.removeChild(link);
+     addLog('SNAPSHOT_SAVED_TO_EVIDENCE_LOG', 'success');
+     playSound('alert');
   };
 
   useEffect(() => {
@@ -224,16 +236,26 @@ const Dashboard: React.FC = () => {
                  <Disc size={12} className="animate-pulse text-red-600" />
                  <span>LIVE_FEED :: {sessionId.substring(0,8)}</span>
               </div>
-              <button onClick={toggleCamera} className="hover:text-white"><X size={16} /></button>
+              <div className="flex items-center gap-2">
+                <button 
+                   onClick={takeSnapshot} 
+                   className="hover:text-white hover:bg-red-900/50 p-1 rounded transition-colors"
+                   title="Take Snapshot"
+                >
+                   <Aperture size={16} />
+                </button>
+                <div className="w-[1px] h-4 bg-red-900/50 mx-1"></div>
+                <button onClick={toggleCamera} className="hover:text-white"><X size={16} /></button>
+              </div>
             </div>
             
             <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden group">
-              {/* Scanlines Overlay */}
-              <div className="absolute inset-0 z-20 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%]"></div>
-              <div className="absolute inset-0 z-20 pointer-events-none animate-[flicker_0.15s_infinite] bg-green-500/5 mix-blend-overlay"></div>
+              {/* Scanlines Overlay - subtle, no filters on image itself */}
+              <div className="absolute inset-0 z-20 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_2px]"></div>
               
               {cameraStream ? (
-                <img src={cameraStream} className="w-full h-full object-cover filter contrast-125 brightness-90 grayscale hover:grayscale-0 transition-all duration-500" alt="Surveillance Feed" />
+                // REMOVED filters for maximum clarity as requested
+                <img src={cameraStream} className="w-full h-full object-cover" alt="Surveillance Feed" />
               ) : (
                 <div className="text-red-500 font-mono text-xs animate-pulse flex flex-col items-center gap-2">
                   <Video size={32} />
@@ -247,11 +269,11 @@ const Dashboard: React.FC = () => {
                  <div className="w-2 h-2 rounded-full bg-red-500 animate-ping"></div>
                  REC
               </div>
-              <div className="absolute bottom-4 left-4 z-30 text-green-500 text-[10px] font-mono opacity-60">
-                 CAM_01 // ISO 800 // F2.8
+              <div className="absolute bottom-4 left-4 z-30 text-green-500 text-[10px] font-mono opacity-80 bg-black/50 px-2 py-1">
+                 CAM_01 // RAW_FEED // 480p
               </div>
                {/* Crosshair */}
-               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 border border-red-500/30 z-20">
+               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 border border-red-500/30 z-20 pointer-events-none">
                   <div className="absolute top-1/2 left-0 w-full h-[1px] bg-red-500/30"></div>
                   <div className="absolute top-0 left-1/2 h-full w-[1px] bg-red-500/30"></div>
                </div>

