@@ -6,7 +6,7 @@ import QRCodeDisplay from '../components/QRCodeDisplay';
 import HackerMap from '../components/HackerMap';
 import { mqttService } from '../services/mqttService';
 import { TerminalLog, DeviceInfo, StreamMessage } from '../types';
-import { Camera, X, Disc, Video, Aperture } from 'lucide-react';
+import { Camera, X, Disc, Video, Aperture, Ghost } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const [sessionId] = useState(uuidv4());
@@ -107,6 +107,19 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const sendAura = () => {
+    if (!connected) {
+      addLog('ERROR: NO TARGET CONNECTED', 'error');
+      return;
+    }
+    addLog('INJECTING_AUDIO_PAYLOAD: AURA.MP3', 'warning');
+    mqttService.publishCommand(sessionId, { 
+      type: 'PLAY_AUDIO', 
+      timestamp: new Date().toISOString(),
+      payload: { url: 'https://www.myinstants.com/media/sounds/auraa.mp3' }
+    });
+  };
+
   const takeSnapshot = () => {
      if (!cameraStream) return;
      const link = document.createElement('a');
@@ -201,6 +214,19 @@ const Dashboard: React.FC = () => {
         
         {/* Terminal Controls */}
         <div className="bg-gray-900 border-t border-gray-800 p-2 flex justify-end gap-2">
+           <button 
+             onClick={sendAura}
+             disabled={!connected}
+             className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider border transition-all ${
+               connected 
+                 ? 'bg-purple-900/20 border-purple-600 text-purple-400 hover:bg-purple-900/50 hover:text-purple-300' 
+                 : 'bg-black border-gray-800 text-gray-700 cursor-not-allowed'
+             }`}
+           >
+             <Ghost size={14} />
+             SEND AURA
+           </button>
+
            <button 
              onClick={toggleCamera}
              disabled={!connected}

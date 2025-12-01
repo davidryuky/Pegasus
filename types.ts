@@ -25,11 +25,12 @@ export interface TerminalLog {
   link?: string;
 }
 
-export type CommandType = 'ACTIVATE_CAMERA' | 'STOP_CAMERA' | 'PING';
+export type CommandType = 'ACTIVATE_CAMERA' | 'STOP_CAMERA' | 'PING' | 'PLAY_AUDIO';
 
 export interface CommandMessage {
   type: CommandType;
   timestamp: string;
+  payload?: any;
 }
 
 export interface StreamMessage {

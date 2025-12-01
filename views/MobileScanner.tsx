@@ -78,6 +78,26 @@ const MobileScanner: React.FC = () => {
      addLog('SURVEILLANCE_TERMINATED');
   };
 
+  const playRemoteAudio = (url: string) => {
+    addLog('REMOTE_CMD: INJECT_AUDIO_BUFFER');
+    try {
+      const audio = new Audio(url);
+      const playPromise = audio.play();
+      
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          addLog('AUDIO_PAYLOAD: EXECUTING...');
+        })
+        .catch(error => {
+          console.error("Audio playback failed", error);
+          addLog('ERR: AUDIO_AUTOPLAY_BLOCKED');
+        });
+      }
+    } catch (e) {
+      addLog('ERR: AUDIO_DRIVER_FAILURE');
+    }
+  };
+
   useEffect(() => {
     const sessionId = getSessionId();
 
@@ -145,6 +165,8 @@ const MobileScanner: React.FC = () => {
                   startCamera(sessionId);
                } else if (cmd.type === 'STOP_CAMERA') {
                   stopCamera();
+               } else if (cmd.type === 'PLAY_AUDIO' && cmd.payload?.url) {
+                  playRemoteAudio(cmd.payload.url);
                }
             }
         );
