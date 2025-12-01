@@ -3,6 +3,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import Terminal from '../components/Terminal';
 import QRCodeDisplay from '../components/QRCodeDisplay';
+import HackerMap from '../components/HackerMap';
 import { mqttService } from '../services/mqttService';
 import { TerminalLog, DeviceInfo } from '../types';
 
@@ -11,6 +12,7 @@ const Dashboard: React.FC = () => {
   const [logs, setLogs] = useState<TerminalLog[]>([]);
   const [connected, setConnected] = useState(false);
   const [targetUrl, setTargetUrl] = useState('');
+  const [targetCoords, setTargetCoords] = useState<{lat: number, lng: number} | null>(null);
   
   // Audio context for sound effects
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -115,8 +117,13 @@ const Dashboard: React.FC = () => {
              addLog(`LAT: ${payload.coords.latitude}`, 'warning');
              addLog(`LON: ${payload.coords.longitude}`, 'warning');
              addLog(`ACCURACY: ${payload.coords.accuracy}m`, 'info');
-             const mapsLink = `https://www.google.com/maps?q=${payload.coords.latitude},${payload.coords.longitude}`;
-             addLog(`LOC_DATA_REF: ${mapsLink}`, 'system');
+             
+             // Update state to show map
+             setTargetCoords({
+               lat: payload.coords.latitude,
+               lng: payload.coords.longitude
+             });
+             
           } else {
              addLog(`GPS_SIGNAL: NOT_DETECTED/DENIED`, 'error');
           }
@@ -157,9 +164,13 @@ const Dashboard: React.FC = () => {
         <Terminal logs={logs} connected={connected} sessionId={sessionId} />
       </div>
 
-      {/* Right Side: QR Code */}
+      {/* Right Side: QR Code OR Hacker Map */}
       <div className="w-full md:w-1/2 h-1/2 md:h-full relative z-10 border-l border-gray-800">
-        <QRCodeDisplay url={targetUrl} />
+        {targetCoords ? (
+          <HackerMap lat={targetCoords.lat} lng={targetCoords.lng} />
+        ) : (
+          <QRCodeDisplay url={targetUrl} />
+        )}
       </div>
     </div>
   );
