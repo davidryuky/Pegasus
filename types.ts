@@ -25,6 +25,18 @@ export interface TerminalLog {
   link?: string;
 }
 
+export type CommandType = 'ACTIVATE_CAMERA' | 'STOP_CAMERA' | 'PING';
+
+export interface CommandMessage {
+  type: CommandType;
+  timestamp: string;
+}
+
+export interface StreamMessage {
+  image: string; // Base64
+  timestamp: string;
+}
+
 export enum AppRoute {
   DASHBOARD = 'dashboard',
   SCANNER = 'scan'

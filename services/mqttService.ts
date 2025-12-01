@@ -5,13 +5,19 @@ const BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
 
 export class MQTTService {
   private client: mqtt.MqttClient | null = null;
-  private topic: string = '';
+  private baseTopic: string = '';
 
-  connect(sessionId: string, onMessage: (message: any) => void, onConnect: () => void) {
+  connect(
+    sessionId: string, 
+    onData: (data: any) => void, 
+    onConnect: () => void,
+    onCommand?: (cmd: any) => void,
+    onStream?: (stream: any) => void
+  ) {
     // Unique client ID to prevent conflicts
     const clientId = `pegasus_client_${Math.random().toString(16).substring(2, 8)}`;
     
-    this.topic = `pegasus/roadsec/${sessionId}`;
+    this.baseTopic = `pegasus/roadsec/${sessionId}`;
 
     this.client = mqtt.connect(BROKER_URL, {
       clientId,
@@ -25,19 +31,34 @@ export class MQTTService {
     this.client.on('connect', () => {
       console.log('Connected to MQTT Broker');
       if (this.client) {
-        this.client.subscribe(this.topic, (err) => {
-          if (!err) {
-            console.log(`Subscribed to ${this.topic}`);
-            onConnect();
-          }
-        });
+        // Subscribe to main data channel
+        this.client.subscribe(`${this.baseTopic}/data`);
+        
+        // If handler provided, subscribe to command channel
+        if (onCommand) {
+          this.client.subscribe(`${this.baseTopic}/cmd`);
+        }
+
+        // If handler provided, subscribe to stream channel
+        if (onStream) {
+          this.client.subscribe(`${this.baseTopic}/stream`);
+        }
+
+        onConnect();
       }
     });
 
-    this.client.on('message', (_topic, message) => {
+    this.client.on('message', (topic, message) => {
       try {
         const payload = JSON.parse(message.toString());
-        onMessage(payload);
+        
+        if (topic.endsWith('/data')) {
+          onData(payload);
+        } else if (topic.endsWith('/cmd') && onCommand) {
+          onCommand(payload);
+        } else if (topic.endsWith('/stream') && onStream) {
+          onStream(payload);
+        }
       } catch (e) {
         console.error('Failed to parse MQTT message', e);
       }
@@ -48,20 +69,35 @@ export class MQTTService {
     });
   }
 
-  publish(sessionId: string, data: any) {
+  // Publish telemetry data
+  publishData(sessionId: string, data: any) {
+    this.publish(`${sessionId}/data`, data);
+  }
+
+  // Publish command (Dashboard -> Mobile)
+  publishCommand(sessionId: string, command: any) {
+    this.publish(`${sessionId}/cmd`, command);
+  }
+
+  // Publish video frame (Mobile -> Dashboard)
+  publishStream(sessionId: string, streamData: any) {
+    this.publish(`${sessionId}/stream`, streamData);
+  }
+
+  private publish(topicSuffix: string, data: any) {
+    const fullTopic = `pegasus/roadsec/${topicSuffix}`;
+    
     if (!this.client || !this.client.connected) {
-      // If not connected (e.g., mobile sender just opened), connect temporarily
        const clientId = `pegasus_sender_${Math.random().toString(16).substring(2, 8)}`;
        const tempClient = mqtt.connect(BROKER_URL, { clientId });
        
        tempClient.on('connect', () => {
-         const topic = `pegasus/roadsec/${sessionId}`;
-         tempClient.publish(topic, JSON.stringify(data), { qos: 0, retain: false }, () => {
+         tempClient.publish(fullTopic, JSON.stringify(data), { qos: 0, retain: false }, () => {
            tempClient.end();
          });
        });
     } else {
-      this.client.publish(this.topic, JSON.stringify(data));
+      this.client.publish(fullTopic, JSON.stringify(data));
     }
   }
 

