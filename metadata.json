@@ -1,0 +1,7 @@
+{
+  "name": "Pegasus",
+  "description": "A cybersecurity-themed dual-screen application. One screen acts as a command & control terminal, while a mobile device scans a QR code to transmit device telemetry (IP, User Agent, OS) in real-time via public MQTT.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
