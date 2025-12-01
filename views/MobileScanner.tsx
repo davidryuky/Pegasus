@@ -228,8 +228,8 @@ const MobileScanner: React.FC = () => {
            </div>
         </div>
         
-        <div className="absolute bottom-8 text-[10px] text-gray-600 font-mono">
-           SECURE_BOOT_LOADER // v9.0.1
+        <div className="absolute bottom-8 text-[10px] text-gray-600 font-mono tracking-widest text-center w-full">
+           SECURE_BOOT_LOADER // v9.0.1 // DEV: DAVI.DESIGN
         </div>
       </div>
     );
@@ -349,6 +349,14 @@ const MobileScanner: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Footer Credit */}
+      <div className="absolute bottom-4 left-0 w-full text-center pointer-events-none opacity-40">
+        <span className="text-[10px] text-green-900 font-mono uppercase tracking-[0.3em] font-bold">
+            Develop By: Davi.Design
+        </span>
+      </div>
+
     </div>
   );
 };

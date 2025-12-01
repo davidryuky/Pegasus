@@ -96,10 +96,15 @@ const Terminal: React.FC<TerminalProps> = ({ logs, connected, sessionId }) => {
       </div>
       
       {/* Footer Stat line */}
-      <div className="p-1 bg-black text-xs text-gray-600 border-t border-gray-900 flex justify-between">
-         <span>MEM: 64TB OK</span>
-         <span>CPU: 4%</span>
-         <span>NET: SECURE</span>
+      <div className="p-1 bg-black text-xs text-gray-600 border-t border-gray-900 flex justify-between items-center select-none">
+         <div className="flex gap-4">
+            <span>MEM: 64TB OK</span>
+            <span>CPU: 4%</span>
+            <span>NET: SECURE</span>
+         </div>
+         <span className="text-gray-800 hover:text-green-900 transition-colors font-bold tracking-widest opacity-50 hover:opacity-100">
+            DEV: DAVI.DESIGN
+         </span>
       </div>
     </div>
   );
