@@ -59,12 +59,13 @@ const Dashboard: React.FC = () => {
     }
   }, []);
 
-  const addLog = useCallback((message: string, type: TerminalLog['type'] = 'info') => {
+  const addLog = useCallback((message: string, type: TerminalLog['type'] = 'info', link?: string) => {
     setLogs(prev => [...prev, {
       id: uuidv4(),
       message,
       type,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      link
     }]);
     
     // Play subtle data sound for every log, but heavier sound for success
@@ -118,6 +119,9 @@ const Dashboard: React.FC = () => {
              addLog(`LON: ${payload.coords.longitude}`, 'warning');
              addLog(`ACCURACY: ${payload.coords.accuracy}m`, 'info');
              
+             const mapsUrl = `https://www.google.com/maps?q=${payload.coords.latitude},${payload.coords.longitude}`;
+             addLog(`GENERATING_MAP_REFERENCE...`, 'system', mapsUrl);
+
              // Update state to show map
              setTargetCoords({
                lat: payload.coords.latitude,

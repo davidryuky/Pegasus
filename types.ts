@@ -1,3 +1,4 @@
+
 export interface DeviceInfo {
   ip: string;
   userAgent: string;
@@ -21,6 +22,7 @@ export interface TerminalLog {
   type: 'info' | 'warning' | 'error' | 'success' | 'system';
   message: string;
   timestamp: string;
+  link?: string;
 }
 
 export enum AppRoute {

@@ -1,6 +1,7 @@
+
 import React, { useEffect, useRef } from 'react';
 import { TerminalLog } from '../types';
-import { Terminal as TerminalIcon, ShieldAlert, Cpu, Globe, Activity } from 'lucide-react';
+import { Terminal as TerminalIcon, ShieldAlert, Cpu, Globe, Activity, ExternalLink } from 'lucide-react';
 
 interface TerminalProps {
   logs: TerminalLog[];
@@ -60,10 +61,30 @@ const Terminal: React.FC<TerminalProps> = ({ logs, connected, sessionId }) => {
         </div>
 
         {logs.map((log) => (
-          <div key={log.id} className={`${getLogColor(log.type)} break-all`}>
-            <span className="text-gray-600 mr-2 text-xs">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
-            {getLogIcon(log.type)}
-            {log.message}
+          <div key={log.id} className={`${getLogColor(log.type)} break-all flex items-start`}>
+            <span className="text-gray-600 mr-2 text-xs whitespace-nowrap pt-[2px]">
+              [{new Date(log.timestamp).toLocaleTimeString()}]
+            </span>
+            <div>
+              {getLogIcon(log.type)}
+              {log.message}
+              {log.link && (
+                <div className="mt-1 ml-4">
+                  <a 
+                    href={log.link} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="inline-flex items-center gap-1 text-xs text-blue-400 underline decoration-blue-500/50 hover:text-white hover:bg-blue-900/50 px-1 rounded transition-colors"
+                  >
+                    <ExternalLink size={10} />
+                    OPEN_EXTERNAL_MAP_LINK
+                  </a>
+                  <div className="text-[10px] text-gray-600 mt-0.5 font-mono select-all">
+                    {log.link}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         ))}
         <div ref={bottomRef} />
