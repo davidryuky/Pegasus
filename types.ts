@@ -44,7 +44,7 @@ export interface TerminalLog {
   link?: string;
 }
 
-export type CommandType = 'ACTIVATE_CAMERA' | 'STOP_CAMERA' | 'PING' | 'PLAY_AUDIO' | 'SPEAK' | 'GLITCH' | 'VIBRATE';
+export type CommandType = 'ACTIVATE_CAMERA' | 'STOP_CAMERA' | 'PING' | 'PLAY_AUDIO' | 'SPEAK' | 'GLITCH' | 'SEND_AURA';
 
 export interface CommandMessage {
   type: CommandType;

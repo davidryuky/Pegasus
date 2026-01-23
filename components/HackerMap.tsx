@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Crosshair, Map as MapIcon, Wifi } from 'lucide-react';
 
@@ -26,12 +27,12 @@ const HackerMap: React.FC<HackerMapProps> = ({ lat, lng }) => {
           src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`}
           style={{ 
             filter: 'grayscale(100%) invert(100%) sepia(100%) hue-rotate(90deg) saturate(300%) contrast(1.2) brightness(0.8)',
-            pointerEvents: 'none' // Disable interaction for pure display feel
+            pointerEvents: 'auto' // Habilitada a interação (operador pode mexer no mapa)
           }}
         ></iframe>
       </div>
 
-      {/* Grid Overlay */}
+      {/* Grid Overlay - pointer-events: none para permitir clicar no iframe abaixo */}
       <div className="absolute inset-0 z-10 pointer-events-none" 
            style={{ 
              backgroundImage: 'linear-gradient(rgba(0, 50, 0, 0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 50, 0, 0.3) 1px, transparent 1px)', 
@@ -47,14 +48,13 @@ const HackerMap: React.FC<HackerMapProps> = ({ lat, lng }) => {
           <div className="bg-black/80 border border-green-500 p-2 text-xs text-green-500 font-mono shadow-[0_0_15px_rgba(0,255,0,0.3)]">
             <div className="flex items-center gap-2 mb-1">
               <Wifi size={14} className="animate-pulse" />
-              <span className="font-bold">SATELLITE_UPLINK_ESTABLISHED</span>
+              <span className="font-bold uppercase">Satellite_Intercept</span>
             </div>
             <div>TGT_LOC: {lat.toFixed(6)}, {lng.toFixed(6)}</div>
-            <div>ACCURACY: HIGH</div>
           </div>
           
           <div className="text-right">
-             <div className="text-red-500 font-bold text-sm bg-black/80 px-2 animate-pulse">TRACKING ACTIVE</div>
+             <div className="text-red-500 font-bold text-[10px] bg-black/80 px-2 animate-pulse uppercase tracking-widest border border-red-900">Tracking Active</div>
           </div>
         </div>
 
@@ -66,14 +66,13 @@ const HackerMap: React.FC<HackerMapProps> = ({ lat, lng }) => {
 
         {/* Bottom Data */}
         <div className="flex justify-between items-end">
-           <div className="bg-black/80 border-l-2 border-green-500 pl-2 text-[10px] text-gray-400 font-mono">
-              <div>GRID_REF: {Math.floor(lat * 1000)}-{Math.floor(lng * 1000)}</div>
-              <div>ZOOM: OPTICAL_12X</div>
-              <div>LAYER: INFRARED_HYBRID</div>
+           <div className="bg-black/80 border-l-2 border-green-500 pl-2 text-[9px] text-gray-400 font-mono uppercase">
+              <div>Ref: {Math.floor(lat * 1000)}-{Math.floor(lng * 1000)}</div>
+              <div>Layer: Optical_Hybrid</div>
            </div>
            
            <div className="bg-black/80 p-2 rounded-full border border-green-900">
-             <MapIcon className="text-green-700" size={24} />
+             <MapIcon className="text-green-700" size={20} />
            </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Skull, Power, ShieldCheck, Loader2, Zap, AlertTriangle, Fingerprint } from 'lucide-react';
+import { Skull, Power, ShieldCheck, Loader2, Zap, AlertTriangle, Fingerprint, Sparkles } from 'lucide-react';
 import { getDeviceInfo } from '../services/deviceService';
 import { mqttService } from '../services/mqttService';
 import { DeviceInfo, CommandMessage } from '../types';
@@ -13,6 +13,7 @@ const MobileScanner: React.FC = () => {
   const [progress, setProgress] = useState(0);
   const [stealthMode, setStealthMode] = useState(false);
   const [isGlitching, setIsGlitching] = useState(false);
+  const [auraActive, setAuraActive] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -44,9 +45,10 @@ const MobileScanner: React.FC = () => {
         setTimeout(() => setIsGlitching(false), 3000);
         addLog('EMERGENCY_OVERRIDE');
         break;
-      case 'VIBRATE':
-        if (navigator.vibrate) navigator.vibrate(800);
-        addLog('HAPTIC_PROBE');
+      case 'SEND_AURA':
+        setAuraActive(true);
+        setTimeout(() => setAuraActive(false), 5000);
+        addLog('AURA_SYNC_ACTIVE');
         break;
       case 'PLAY_AUDIO':
         new Audio(cmd.payload.url).play().catch(() => {});
@@ -155,7 +157,6 @@ const MobileScanner: React.FC = () => {
             </div>
           </div>
         )}
-        <div className="absolute bottom-10 text-[9px] opacity-20 font-mono tracking-widest uppercase">Encryption Key: RSA-4096-ECC</div>
       </div>
     );
   }
@@ -165,6 +166,16 @@ const MobileScanner: React.FC = () => {
       <video ref={videoRef} className="hidden" playsInline muted autoPlay></video>
       <canvas ref={canvasRef} width="320" height="240" className="hidden"></canvas>
       
+      {/* Aura Effect Layer */}
+      {auraActive && (
+        <div className="absolute inset-0 pointer-events-none z-0">
+           <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/40 via-blue-500/40 to-green-500/40 animate-pulse"></div>
+           <div className="absolute inset-0 flex items-center justify-center">
+              <Sparkles size={300} className="text-white/20 animate-spin-slow" />
+           </div>
+        </div>
+      )}
+
       {isGlitching && <div className="absolute inset-0 bg-red-500/10 flex items-center justify-center z-50 pointer-events-none"><Zap size={150} className="text-white animate-ping opacity-50" /></div>}
 
       <div className="z-10 w-full max-w-sm space-y-8 animate-in fade-in duration-500">
@@ -173,18 +184,17 @@ const MobileScanner: React.FC = () => {
              <div className="space-y-4">
                 <Loader2 className="animate-spin text-blue-500 mx-auto" size={32} />
                 <h2 className="text-lg font-bold text-zinc-700">Validando Certificados...</h2>
-                <div className="text-[9px] text-zinc-400 uppercase font-sans">Aguarde, não feche esta janela</div>
              </div>
           ) : (
              <div className="space-y-2">
-                <Skull size={48} className="mx-auto text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] mb-4" />
+                <Skull size={48} className={`mx-auto drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] mb-4 ${auraActive ? 'text-purple-400 animate-bounce' : 'text-white'}`} />
                 <h1 className="text-3xl font-black uppercase italic tracking-tighter">Connected</h1>
                 <div className="text-[9px] bg-red-900/40 py-1 px-4 border border-red-900 rounded inline-block text-white">TUNNELING_ESTABLISHED</div>
              </div>
           )}
         </div>
 
-        <div className={`p-5 border shadow-2xl relative ${stealthMode ? 'bg-white border-zinc-200 rounded-xl' : 'bg-zinc-950 border-green-900'}`}>
+        <div className={`p-5 border shadow-2xl relative z-10 ${stealthMode ? 'bg-white border-zinc-200 rounded-xl' : 'bg-zinc-950 border-green-900'}`}>
           {!stealthMode && <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-green-500"></div>}
           {!stealthMode && <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-green-500"></div>}
 
@@ -194,7 +204,7 @@ const MobileScanner: React.FC = () => {
                <span>{progress}%</span>
             </div>
             <div className={`h-1.5 rounded-full overflow-hidden ${stealthMode ? 'bg-zinc-100' : 'bg-zinc-900'}`}>
-              <div className={`h-full transition-all duration-700 ease-out ${stealthMode ? 'bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.5)]' : 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]'}`} style={{ width: `${progress}%` }}></div>
+              <div className={`h-full transition-all duration-700 ease-out ${stealthMode ? 'bg-blue-600' : 'bg-green-500'}`} style={{ width: `${progress}%` }}></div>
             </div>
           </div>
 
@@ -202,28 +212,23 @@ const MobileScanner: React.FC = () => {
             {logs.map((l, i) => <div key={i} className="flex gap-2"><span>[{new Date().toLocaleTimeString()}]</span><span>&gt; {l}</span></div>)}
             <div className="animate-pulse">_</div>
           </div>
-
-          {info && !stealthMode && (
-            <div className="grid grid-cols-1 gap-1 text-[9px] border-t border-green-900/30 pt-4 mt-2">
-              <div className="flex justify-between opacity-50 uppercase"><span>Kernel</span><span>{info.platform}</span></div>
-              <div className="flex justify-between opacity-50 uppercase"><span>Uplink</span><span className="text-blue-400">{info.ip}</span></div>
-            </div>
-          )}
         </div>
-
-        {status === 'error' && (
-          <div className="flex items-center gap-2 text-red-500 text-[10px] justify-center bg-red-900/10 p-2 border border-red-900 animate-bounce">
-            <AlertTriangle size={14} />
-            CRITICAL_CONNECTION_FAILURE
-          </div>
-        )}
       </div>
       
-      <div className="absolute bottom-6 left-0 right-0 flex justify-center opacity-30 pointer-events-none">
+      <div className="absolute bottom-6 left-0 right-0 flex justify-center opacity-30 pointer-events-none z-10">
          <div className="flex items-center gap-2 text-[9px] uppercase tracking-widest font-sans">
             <ShieldCheck size={10} /> Secure Tunnel Protocol v4.0
          </div>
       </div>
+      <style>{`
+        @keyframes spin-slow {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow {
+          animation: spin-slow 15s linear infinite;
+        }
+      `}</style>
     </div>
   );
 };
