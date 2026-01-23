@@ -34,12 +34,11 @@ export interface DeviceInfo {
     zip?: string;
     asn?: string;
   };
-  intelligenceReport?: string;
 }
 
 export interface TerminalLog {
   id: string;
-  type: 'info' | 'warning' | 'error' | 'success' | 'system' | 'ai';
+  type: 'info' | 'warning' | 'error' | 'success' | 'system';
   message: string;
   timestamp: string;
   link?: string;

