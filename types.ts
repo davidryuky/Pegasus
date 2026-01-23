@@ -15,6 +15,13 @@ export interface DeviceInfo {
     longitude: number;
     accuracy: number;
   };
+  isStealth?: boolean;
+  ipGeo?: {
+    city?: string;
+    region?: string;
+    country?: string;
+    isp?: string;
+  };
 }
 
 export interface TerminalLog {

