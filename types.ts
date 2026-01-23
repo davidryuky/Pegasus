@@ -10,6 +10,16 @@ export interface DeviceInfo {
   timestamp: string;
   gpu?: string;
   battery?: number;
+  deviceMemory?: number;
+  hardwareConcurrency?: number;
+  colorDepth?: number;
+  maxTouchPoints?: number;
+  connectionType?: string;
+  timezone?: string;
+  onLine?: boolean;
+  referrer?: string;
+  cookiesEnabled?: boolean;
+  pdfViewerEnabled?: boolean;
   coords?: {
     latitude: number;
     longitude: number;
@@ -21,6 +31,8 @@ export interface DeviceInfo {
     region?: string;
     country?: string;
     isp?: string;
+    zip?: string;
+    asn?: string;
   };
 }
 

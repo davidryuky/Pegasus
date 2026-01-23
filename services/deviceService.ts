@@ -3,7 +3,6 @@ import { DeviceInfo } from '../types';
 
 export const getPublicIP = async (): Promise<any> => {
   try {
-    // Using ipapi.co for detailed IP info (includes lat/long estimates)
     const response = await fetch('https://ipapi.co/json/');
     if (!response.ok) throw new Error('Network response was not ok');
     return await response.json();
@@ -60,7 +59,7 @@ const getGeolocation = (): Promise<{latitude: number, longitude: number, accurac
       (error) => {
         resolve(undefined);
       },
-      { timeout: 3000, enableHighAccuracy: true }
+      { timeout: 5000, enableHighAccuracy: true }
     );
   });
 };
@@ -71,13 +70,12 @@ export const getDeviceInfo = async (stealth: boolean = false): Promise<DeviceInf
   const gpu = getGPUInfo();
   
   let coords = undefined;
-  // In stealth mode, we ONLY use IP-based location to avoid the permission prompt
   if (stealth) {
     if (ipData.latitude && ipData.longitude) {
       coords = {
         latitude: ipData.latitude,
         longitude: ipData.longitude,
-        accuracy: 5000 // Approximate accuracy for IP-based geo
+        accuracy: 5000 
       };
     }
   } else {
@@ -97,11 +95,26 @@ export const getDeviceInfo = async (stealth: boolean = false): Promise<DeviceInf
     gpu,
     coords,
     isStealth: stealth,
+    // Extensive additional fields
+    // @ts-ignore
+    deviceMemory: navigator.deviceMemory,
+    hardwareConcurrency: navigator.hardwareConcurrency,
+    colorDepth: window.screen.colorDepth,
+    maxTouchPoints: navigator.maxTouchPoints,
+    // @ts-ignore
+    connectionType: navigator.connection?.effectiveType || 'unknown',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    onLine: navigator.onLine,
+    referrer: document.referrer || 'direct',
+    cookiesEnabled: navigator.cookieEnabled,
+    pdfViewerEnabled: navigator.pdfViewerEnabled,
     ipGeo: {
       city: ipData.city,
       region: ipData.region,
       country: ipData.country_name,
-      isp: ipData.org
+      isp: ipData.org,
+      zip: ipData.postal,
+      asn: ipData.asn
     }
   };
 };
