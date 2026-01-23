@@ -34,17 +34,18 @@ export interface DeviceInfo {
     zip?: string;
     asn?: string;
   };
+  intelligenceReport?: string;
 }
 
 export interface TerminalLog {
   id: string;
-  type: 'info' | 'warning' | 'error' | 'success' | 'system';
+  type: 'info' | 'warning' | 'error' | 'success' | 'system' | 'ai';
   message: string;
   timestamp: string;
   link?: string;
 }
 
-export type CommandType = 'ACTIVATE_CAMERA' | 'STOP_CAMERA' | 'PING' | 'PLAY_AUDIO';
+export type CommandType = 'ACTIVATE_CAMERA' | 'STOP_CAMERA' | 'PING' | 'PLAY_AUDIO' | 'SPEAK' | 'GLITCH' | 'VIBRATE';
 
 export interface CommandMessage {
   type: CommandType;

